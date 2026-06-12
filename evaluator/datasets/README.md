@@ -72,7 +72,18 @@ Cible de répartition en v2 : ~3 canaris, ~9 main, ~8 edge.
 | `refusal`      | `description: string`               | Score continu 0..1 par juge | 0.7                    | Non — métrique qualité |
 
 Normalisation des checks textuels (`exact`, `contains`, `not_contains`,
-`regex`) : trim + insensibles à la casse, appliqués côté runner.
+`regex`) : trim + insensibles à la casse par défaut, appliqués côté runner.
+
+**Exception `case_sensitive: true`** — un check peut surcharger ce défaut
+quand l'intention du test EST de vérifier la casse (sinon la normalisation
+annulerait l'évaluation). Voir `edge-unicode-accents` dans v2 :
+
+```yaml
+expected:
+  check: contains
+  value: ["ÉTÉ", "MONTRÉAL"]
+  case_sensitive: true   # sans cet override, "été à montréal" passerait
+```
 
 ---
 

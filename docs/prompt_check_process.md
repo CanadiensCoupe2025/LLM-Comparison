@@ -95,11 +95,18 @@ flowchart LR
 
 **Conventions de normalisation** (avant comparaison) :
 
-- `exact`, `contains`, `not_contains`, `regex` : trim + insensibles à la casse ; `regex` appliqué avec `IGNORECASE`.
+- `exact`, `contains`, `not_contains`, `regex` : trim + insensibles à la casse **par défaut** ; `regex` appliqué avec `IGNORECASE`.
 - `contains` : **toutes** les valeurs listées doivent apparaître (ET logique).
 - `not_contains` : **aucune** des valeurs listées ne doit apparaître.
 - `json_schema` : validation structurelle stricte (pas de champs inattendus tolérés).
 - `code_test` : extraction du premier bloc ` ```python ` de la réponse, chargement de `function` dans un sandbox isolé, puis exécution des asserts.
+
+> **Override `case_sensitive: true`** — un check peut désactiver
+> la normalisation insensible à la casse au cas par cas, quand
+> l'intention du test est précisément de vérifier la casse (sinon
+> la normalisation annule l'évaluation). Exemple : `edge-unicode-accents`
+> teste la conversion en MAJUSCULES — sans cet override, une réponse
+> en minuscules passerait par erreur.
 
 ---
 
