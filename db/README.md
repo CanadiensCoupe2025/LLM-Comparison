@@ -48,6 +48,7 @@ One model's response for a given run.
 | id | SERIAL | Auto-generated unique ID |
 | run_id | INTEGER | Foreign key → runs.id |
 | model_id | INTEGER | Foreign key → models.id |
+| case_id | VARCHAR(100) | Dataset case identifier (from migration 003, nullable) |
 | response | TEXT | Full text response from the model |
 | latency_ms | INTEGER | API response time in milliseconds |
 | input_tokens | INTEGER | Number of tokens in the prompt |
@@ -64,9 +65,15 @@ One model's response for a given run.
 
 ## How to run
 
-Apply the schema (creates all 4 tables):
+Apply the base schema (creates all 4 tables):
 ```bash
 docker compose exec postgres psql -U llm -d llm_eval -f /schema.sql
+```
+
+Apply migrations in order:
+```bash
+docker compose exec postgres psql -U llm -d llm_eval -f /002_prompt_versioning.sql
+docker compose exec postgres psql -U llm -d llm_eval -f /003_results_case_id.sql
 ```
 
 Insert seed data:
