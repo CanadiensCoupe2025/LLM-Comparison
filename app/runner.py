@@ -1,0 +1,285 @@
+"""Evaluation runner (SCRUM-19).
+
+Given a YAML dataset and a list of model keys, fan calls out across all
+(case, model) pairs in parallel via a ThreadPoolExecutor, then persist each
+result to PostgreSQL — synchronously, on the main thread, as futures resolve.
+
+CLI :
+    python runner.py --dataset evaluator/datasets/regression_v1.yaml \\
+                     --models claude-sonnet-4-6 deepseek-v4-flash \\
+                     --max-workers 6
+
+Exit codes:
+    0  every call succeeded and was persisted
+    1  configuration error (env var missing, DB unreachable, system prompt absent)
+    2  bad CLI arguments (handled by argparse → exits 2 itself)
+    3  the run completed but at least one model call raised
+"""
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import os
+import sys
+from dataclasses import dataclass
+from decimal import Decimal
+from pathlib import Path
+from typing import Callable, Optional
+
+import psycopg
+
+from app.datasets import Case, Dataset, DatasetError, load_dataset
+from app.llm_client import MODEL_REGISTRY, LLMResponse, call_llm
+from app.prompts.repository import PostgresPromptRepository, PromptRepository
+from app.results_repository import (
+    ModelNotFoundError,
+    ModelRow,
+    PostgresResultsRepository,
+    ResultsRepository,
+)
+
+
+SYSTEM_PROMPT_NAME = "eval_system"
+DEFAULT_MAX_WORKERS = 6
+EXIT_OK = 0
+EXIT_CONFIG = 1
+EXIT_PARTIAL_FAILURE = 3
+
+
+# ---------------------------------------------------------------------------
+# Pure helpers (no DB, no IO) — easy to unit-test in isolation.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TaskResult:
+    """What a single (case, model) thread returns. Cost is computed by the
+    main thread after futures resolve so the workers stay pure."""
+
+    case_id: str
+    model_row: ModelRow
+    response: LLMResponse
+
+
+def compute_cost(
+    *, input_tokens: int, output_tokens: int, model: ModelRow
+) -> Decimal:
+    """Total USD cost for a single call given the model's per-token prices."""
+    return (
+        Decimal(input_tokens) * model.input_cost
+        + Decimal(output_tokens) * model.output_cost
+    )
+
+
+def build_prompt(system: str, user: str) -> str:
+    """Inline-prepend the system prompt to the user message (SCRUM-17's
+    `call_llm` doesn't expose a system parameter, so we concatenate)."""
+    return f"{system.strip()}\n\n{user}"
+
+
+def resolve_models(
+    keys: list[str], repo: ResultsRepository
+) -> list[tuple[str, ModelRow]]:
+    """Validate every model key against MODEL_REGISTRY and the DB.
+
+    Returns a list of `(model_key, ModelRow)` pairs, preserving input order.
+    Raises ValueError on unknown registry key, ModelNotFoundError on missing
+    DB row.
+    """
+    out: list[tuple[str, ModelRow]] = []
+    for key in keys:
+        if key not in MODEL_REGISTRY:
+            raise ValueError(
+                f"Unknown model key {key!r}. "
+                f"Known keys: {sorted(MODEL_REGISTRY)}"
+            )
+        out.append((key, repo.lookup_model(key)))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
+
+
+def execute_run(
+    *,
+    dataset: Dataset,
+    model_pairs: list[tuple[str, ModelRow]],
+    system_prompt: str,
+    run_id: int,
+    repo: ResultsRepository,
+    max_workers: int,
+    temperature: float,
+    call: Callable[..., LLMResponse] = call_llm,
+) -> tuple[int, int]:
+    """Fan out every (case, model) call, persist each result as it returns.
+
+    Returns `(inserted_count, failed_count)`. Always calls `repo.finalize_run`
+    before returning, even if every task raises.
+    """
+    inserted = 0
+    failed = 0
+
+    def task(case: Case, model_key: str, model_row: ModelRow) -> TaskResult:
+        provider = MODEL_REGISTRY[model_key].provider
+        prompt = build_prompt(system_prompt, case.prompt)
+        response = call(provider, model_key, prompt, temperature=temperature)
+        return TaskResult(case_id=case.id, model_row=model_row, response=response)
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futures: dict[concurrent.futures.Future, tuple[str, str]] = {}
+            for case in dataset.cases:
+                for model_key, model_row in model_pairs:
+                    fut = ex.submit(task, case, model_key, model_row)
+                    futures[fut] = (case.id, model_key)
+
+            for fut in concurrent.futures.as_completed(futures):
+                case_id, model_key = futures[fut]
+                try:
+                    result = fut.result()
+                except Exception as e:
+                    failed += 1
+                    print(
+                        f"  ✗ case={case_id!r} model={model_key!r} → {type(e).__name__}: {e}",
+                        file=sys.stderr,
+                    )
+                    continue
+
+                cost = compute_cost(
+                    input_tokens=result.response.tokens_in,
+                    output_tokens=result.response.tokens_out,
+                    model=result.model_row,
+                )
+                repo.insert_result(
+                    run_id=run_id,
+                    model_id=result.model_row.id,
+                    case_id=result.case_id,
+                    response=result.response.content,
+                    latency_ms=int(result.response.latency_ms),
+                    input_tokens=result.response.tokens_in,
+                    output_tokens=result.response.tokens_out,
+                    cost=cost,
+                )
+                inserted += 1
+                print(
+                    f"  ✓ case={case_id!r} model={model_key!r} "
+                    f"tokens={result.response.tokens_in}/{result.response.tokens_out} "
+                    f"cost=${cost:.6f}"
+                )
+    finally:
+        repo.finalize_run(run_id)
+
+    return inserted, failed
+
+
+# ---------------------------------------------------------------------------
+# CLI plumbing
+# ---------------------------------------------------------------------------
+
+
+def _connect_db():
+    """Open a psycopg connection from DATABASE_URL. Exits with code 1 if absent."""
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        sys.exit("DATABASE_URL is not set — check your .env or compose env_file.")
+    return psycopg.connect(url)
+
+
+def _load_system_prompt(prompt_repo: PromptRepository) -> tuple[int, str]:
+    row = prompt_repo.latest_by_name(SYSTEM_PROMPT_NAME)
+    if row is None:
+        sys.exit(
+            f"System prompt {SYSTEM_PROMPT_NAME!r} not found in the `prompts` table. "
+            "Run `python -m app.prompts.cli sync` first."
+        )
+    return row.id, row.content
+
+
+def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="runner",
+        description="Evaluation runner: fan a dataset across N models in parallel.",
+    )
+    parser.add_argument(
+        "--dataset",
+        required=True,
+        type=Path,
+        help="Path to a YAML dataset file.",
+    )
+    parser.add_argument(
+        "--models",
+        required=True,
+        nargs="+",
+        metavar="KEY",
+        help="One or more model keys from MODEL_REGISTRY.",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=DEFAULT_MAX_WORKERS,
+        help=f"ThreadPoolExecutor concurrency cap (default: {DEFAULT_MAX_WORKERS}).",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="Sampling temperature (ignored by reasoning models).",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    args = _parse_args(argv)
+
+    try:
+        dataset = load_dataset(args.dataset)
+    except DatasetError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return EXIT_CONFIG
+
+    # Validate model keys upfront — fail before opening the DB.
+    unknown = [k for k in args.models if k not in MODEL_REGISTRY]
+    if unknown:
+        print(
+            f"error: unknown model key(s): {unknown}. "
+            f"Known: {sorted(MODEL_REGISTRY)}",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG
+
+    conn = _connect_db()
+    try:
+        results_repo = PostgresResultsRepository(conn)
+        prompt_repo = PostgresPromptRepository(conn)
+
+        try:
+            model_pairs = resolve_models(args.models, results_repo)
+        except (ValueError, ModelNotFoundError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return EXIT_CONFIG
+
+        prompt_id, system_prompt = _load_system_prompt(prompt_repo)
+
+        run_id = results_repo.create_run(prompt_id, args.dataset.name)
+        print(
+            f"Run id={run_id}  dataset={dataset.name} v{dataset.version}  "
+            f"cases={len(dataset.cases)}  models={len(model_pairs)}"
+        )
+
+        inserted, failed = execute_run(
+            dataset=dataset,
+            model_pairs=model_pairs,
+            system_prompt=system_prompt,
+            run_id=run_id,
+            repo=results_repo,
+            max_workers=args.max_workers,
+            temperature=args.temperature,
+        )
+
+        total = len(dataset.cases) * len(model_pairs)
+        print(f"\n{inserted}/{total} results inserted, {failed} failed.")
+        return EXIT_PARTIAL_FAILURE if failed else EXIT_OK
+    finally:
+        conn.close()
