@@ -1,0 +1,24 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["app"]
+branch = false
+omit = [
+    # Placeholder container loop — no logic worth covering.
+    "app/main.py",
+    # Package-init re-export shims.
+    "app/prompts/__init__.py",
+]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_covered = false
+exclude_also = [
+    # Dead-code branches we don't run today but keep for future models.
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]

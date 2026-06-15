@@ -322,3 +322,92 @@ def test_main_unknown_model_key_exits_before_any_db_or_api_call(tmp_path):
         exit_code = main(["--dataset", str(ds), "--models", "bogus"])
         assert exit_code == 1
         mock_connect.assert_not_called()
+
+
+def test_main_missing_dataset_file_exits_one_before_db_connect(tmp_path):
+    with patch("app.runner._connect_db") as mock_connect:
+        exit_code = main(
+            ["--dataset", str(tmp_path / "does-not-exist.yaml"), "--models", "claude-sonnet-4-6"]
+        )
+        assert exit_code == 1
+        mock_connect.assert_not_called()
+
+
+def test_load_system_prompt_exits_when_eval_system_missing():
+    """`_load_system_prompt` is the runner's only guard against running
+    against an un-synced DB. If it returns None, we must `sys.exit` so the
+    user gets a clear error instead of a NoneType.id crash later."""
+    from app.runner import _load_system_prompt
+
+    class _EmptyPromptRepo:
+        def latest_by_name(self, name):  # noqa: D401
+            return None
+
+    with pytest.raises(SystemExit) as exc:
+        _load_system_prompt(_EmptyPromptRepo())
+    assert "eval_system" in str(exc.value)
+
+
+def test_parse_args_accepts_temperature_and_max_workers():
+    """Confirm the non-default CLI flags actually propagate through argparse."""
+    from app.runner import _parse_args
+
+    args = _parse_args(
+        [
+            "--dataset", "x.yaml",
+            "--models", "claude-sonnet-4-6", "gpt-5",
+            "--max-workers", "12",
+            "--temperature", "0.7",
+        ]
+    )
+    assert args.max_workers == 12
+    assert args.temperature == 0.7
+    assert args.models == ["claude-sonnet-4-6", "gpt-5"]
+
+
+def test_main_happy_path_persists_results_to_db(tmp_path):
+    """End-to-end CLI smoke with every external surface mocked.
+
+    Note: we can't simply `patch("app.runner.call_llm", ...)` because
+    `execute_run` captures `call_llm` as a default parameter at *definition*
+    time. Instead we mock at the SDK seam (`anthropic.Anthropic`), the same
+    place `tests/test_llm_client.py` mocks, so the real `call_llm` runs but
+    talks to a fake SDK.
+    """
+    import os
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    ds = tmp_path / "tiny.yaml"
+    ds.write_text(
+        "dataset:\n  name: t\n  version: 1\ncases:\n  - id: a\n    prompt: hi\n",
+        encoding="utf-8",
+    )
+
+    fake_prompt_row = MagicMock(id=5, content="SYSTEM")
+    fake_prompt_repo = MagicMock()
+    fake_prompt_repo.latest_by_name.return_value = fake_prompt_row
+
+    fake_results_repo = FakeResultsRepository({
+        "claude-sonnet-4-6": _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0"),
+    })
+
+    fake_anthropic_response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="hello back")],
+        usage=SimpleNamespace(input_tokens=4, output_tokens=2),
+    )
+
+    with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}), \
+         patch("anthropic.Anthropic") as mock_anthropic_cls, \
+         patch("app.runner._connect_db", return_value=MagicMock()) as mock_connect, \
+         patch("app.runner.PostgresResultsRepository", return_value=fake_results_repo), \
+         patch("app.runner.PostgresPromptRepository", return_value=fake_prompt_repo):
+        mock_anthropic_cls.return_value.messages.create.return_value = fake_anthropic_response
+        exit_code = main(["--dataset", str(ds), "--models", "claude-sonnet-4-6"])
+
+    assert exit_code == 0
+    mock_connect.assert_called_once()
+    assert len(fake_results_repo.inserts) == 1
+    assert fake_results_repo.inserts[0].case_id == "a"
+    assert fake_results_repo.inserts[0].response == "hello back"
+    assert fake_results_repo.finalized  # run was finalized
