@@ -160,7 +160,7 @@ def test_execute_run_inserts_one_row_per_case_model_pair():
     repo = FakeResultsRepository({k: v for k, v in pairs})
     fake_call = lambda *_a, **_k: _fake_response("ok", 10, 5)
 
-    inserted, failed = execute_run(
+    outcome = execute_run(
         dataset=_dataset(cases),
         model_pairs=pairs,
         system_prompt="SYS",
@@ -171,7 +171,7 @@ def test_execute_run_inserts_one_row_per_case_model_pair():
         call=fake_call,
     )
 
-    assert (inserted, failed) == (4, 0)
+    assert (outcome.inserted, outcome.failed) == (4, 0)
     keys = {(r.case_id, r.model_id) for r in repo.inserts}
     assert keys == {("c1", 1), ("c1", 2), ("c2", 1), ("c2", 2)}
 
@@ -196,6 +196,44 @@ def test_execute_run_computes_cost_from_tokens_and_prices():
 
     expected = Decimal("0.000003") * 1000 + Decimal("0.000015") * 500
     assert repo.inserts[0].cost == expected
+
+
+def test_execute_run_aggregates_metrics_into_run_outcome():
+    """SCRUM-22: RunOutcome should sum cost + tokens and collect latencies."""
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0.000003", out_cost="0.000015")),
+        ("deepseek-v4-flash", _model(id=2, name="deepseek-v4-flash", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+
+    responses = iter([
+        _fake_response("a", 100, 50),
+        _fake_response("b", 200, 80),
+    ])
+    fake_call = lambda *_a, **_k: next(responses)
+
+    outcome = execute_run(
+        dataset=_dataset([_case("c1", "hi")]),
+        model_pairs=pairs,
+        system_prompt="SYS",
+        run_id=1,
+        repo=repo,
+        max_workers=1,  # serialize so the responses iter is deterministic
+        temperature=0.0,
+        call=fake_call,
+    )
+
+    assert outcome.inserted == 2 and outcome.failed == 0
+    assert outcome.total_input_tokens == 300
+    assert outcome.total_output_tokens == 130
+    # Both calls use the same fake latency (42 ms), so min/avg/max all = 42.
+    assert outcome.latencies_ms == [42, 42]
+    assert outcome.min_latency_ms == 42
+    assert outcome.max_latency_ms == 42
+    assert outcome.avg_latency_ms == 42.0
+    # Total cost = sum of per-call costs computed from each model's prices.
+    expected_cost = (Decimal("0.000003") * 100 + Decimal("0.000015") * 50)  # sonnet
+    assert outcome.total_cost == expected_cost
 
 
 def test_execute_run_prepends_system_prompt_to_user_prompt():
@@ -234,7 +272,7 @@ def test_execute_run_records_partial_failures_and_continues():
             raise RuntimeError("boom")
         return _fake_response("ok", 1, 1)
 
-    inserted, failed = execute_run(
+    outcome = execute_run(
         dataset=_dataset(cases),
         model_pairs=pairs,
         system_prompt="SYS",
@@ -245,7 +283,7 @@ def test_execute_run_records_partial_failures_and_continues():
         call=flaky,
     )
 
-    assert (inserted, failed) == (1, 1)
+    assert (outcome.inserted, outcome.failed) == (1, 1)
     assert [r.case_id for r in repo.inserts] == ["c2"]
 
 
