@@ -44,7 +44,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         "anthropic", "claude-sonnet-4-6", ApiSurface.MESSAGES, True, False
     ),
     "claude-opus-4-8": ModelSpec(
-        "anthropic", "claude-opus-4-8", ApiSurface.MESSAGES, True, False
+        "anthropic", "claude-opus-4-8", ApiSurface.MESSAGES, False, False
     ),
     "gpt-5": ModelSpec(
         "openai", "gpt-5-2025-08-07", ApiSurface.RESPONSES, False, True
@@ -150,7 +150,7 @@ class OpenAIAdapter:
             model=spec.api_id,
             input=prompt,
             max_output_tokens=max_tokens,
-            reasoning={"effort": "medium", "summary": "concise"},
+            reasoning={"effort": "medium"},
         )
         latency_ms = (time.perf_counter() - t0) * 1000.0
 
