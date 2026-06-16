@@ -61,6 +61,36 @@ class TaskResult:
     response: LLMResponse
 
 
+@dataclass
+class RunOutcome:
+    """In-memory aggregation of a run's results (SCRUM-22).
+
+    Persisted metrics still live in `results` (per row); this is the
+    summary the runner prints to stdout after a run completes. Grafana
+    and ad-hoc analysis should query the `run_metrics` view (migration
+    004) for the same shape over historical data.
+    """
+
+    inserted: int
+    failed: int
+    total_cost: Decimal
+    total_input_tokens: int
+    total_output_tokens: int
+    latencies_ms: list[int]
+
+    @property
+    def avg_latency_ms(self) -> float:
+        return sum(self.latencies_ms) / len(self.latencies_ms) if self.latencies_ms else 0.0
+
+    @property
+    def min_latency_ms(self) -> int:
+        return min(self.latencies_ms) if self.latencies_ms else 0
+
+    @property
+    def max_latency_ms(self) -> int:
+        return max(self.latencies_ms) if self.latencies_ms else 0
+
+
 def compute_cost(
     *, input_tokens: int, output_tokens: int, model: ModelRow
 ) -> Decimal:
@@ -112,14 +142,19 @@ def execute_run(
     max_workers: int,
     temperature: float,
     call: Callable[..., LLMResponse] = call_llm,
-) -> tuple[int, int]:
+) -> RunOutcome:
     """Fan out every (case, model) call, persist each result as it returns.
 
-    Returns `(inserted_count, failed_count)`. Always calls `repo.finalize_run`
-    before returning, even if every task raises.
+    Returns a `RunOutcome` with insert/failure counts and in-memory
+    metrics aggregates (total cost, tokens, latencies). Always calls
+    `repo.finalize_run` before returning, even if every task raises.
     """
     inserted = 0
     failed = 0
+    total_cost = Decimal(0)
+    total_input_tokens = 0
+    total_output_tokens = 0
+    latencies_ms: list[int] = []
 
     def task(case: Case, model_key: str, model_row: ModelRow) -> TaskResult:
         provider = MODEL_REGISTRY[model_key].provider
@@ -152,17 +187,22 @@ def execute_run(
                     output_tokens=result.response.tokens_out,
                     model=result.model_row,
                 )
+                latency_ms = int(result.response.latency_ms)
                 repo.insert_result(
                     run_id=run_id,
                     model_id=result.model_row.id,
                     case_id=result.case_id,
                     response=result.response.content,
-                    latency_ms=int(result.response.latency_ms),
+                    latency_ms=latency_ms,
                     input_tokens=result.response.tokens_in,
                     output_tokens=result.response.tokens_out,
                     cost=cost,
                 )
                 inserted += 1
+                total_cost += cost
+                total_input_tokens += result.response.tokens_in
+                total_output_tokens += result.response.tokens_out
+                latencies_ms.append(latency_ms)
                 print(
                     f"  ✓ case={case_id!r} model={model_key!r} "
                     f"tokens={result.response.tokens_in}/{result.response.tokens_out} "
@@ -171,7 +211,14 @@ def execute_run(
     finally:
         repo.finalize_run(run_id)
 
-    return inserted, failed
+    return RunOutcome(
+        inserted=inserted,
+        failed=failed,
+        total_cost=total_cost,
+        total_input_tokens=total_input_tokens,
+        total_output_tokens=total_output_tokens,
+        latencies_ms=latencies_ms,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -268,7 +315,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             f"cases={len(dataset.cases)}  models={len(model_pairs)}"
         )
 
-        inserted, failed = execute_run(
+        outcome = execute_run(
             dataset=dataset,
             model_pairs=model_pairs,
             system_prompt=system_prompt,
@@ -279,7 +326,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
 
         total = len(dataset.cases) * len(model_pairs)
-        print(f"\n{inserted}/{total} results inserted, {failed} failed.")
-        return EXIT_PARTIAL_FAILURE if failed else EXIT_OK
+        print(f"\n{outcome.inserted}/{total} results inserted, {outcome.failed} failed.")
+        if outcome.inserted:
+            print(
+                f"Summary: total cost=${outcome.total_cost:.6f}  "
+                f"tokens={outcome.total_input_tokens}/{outcome.total_output_tokens}  "
+                f"latency min/avg/max={outcome.min_latency_ms}/"
+                f"{outcome.avg_latency_ms:.0f}/{outcome.max_latency_ms} ms"
+            )
+        return EXIT_PARTIAL_FAILURE if outcome.failed else EXIT_OK
     finally:
         conn.close()

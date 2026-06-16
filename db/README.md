@@ -63,6 +63,29 @@ One model's response for a given run.
 - One run can have many results
 - One model can appear in many results
 
+## Vues (SCRUM-22)
+
+### `run_metrics`
+Agrégation par run (totaux + percentiles latence). Source canonique pour
+Grafana et l'analyse historique des coûts/perfs. Créée par migration 004.
+
+| Column | Source | Description |
+|---|---|---|
+| run_id | runs.id | |
+| dataset, prompt_id, started_at, finished_at | runs.* | |
+| duration_ms | finished_at − started_at | Wall-time du run (NULL si pas fini) |
+| n_results, n_models, n_cases | COUNT(results) | |
+| total_cost | SUM(results.cost) | USD |
+| total_input_tokens, total_output_tokens | SUM(...) | |
+| avg_latency_ms, p50_latency_ms, p95_latency_ms | AGG(results.latency_ms) | |
+| min_latency_ms, max_latency_ms | MIN/MAX(latency_ms) | |
+
+Exemples :
+```sql
+SELECT * FROM run_metrics ORDER BY started_at DESC LIMIT 10;
+SELECT dataset, AVG(total_cost) FROM run_metrics GROUP BY dataset;
+```
+
 ## How to run
 
 Apply the base schema (creates all 4 tables):
@@ -74,6 +97,7 @@ Apply migrations in order:
 ```bash
 docker compose exec postgres psql -U llm -d llm_eval -f /002_prompt_versioning.sql
 docker compose exec postgres psql -U llm -d llm_eval -f /003_results_case_id.sql
+docker compose exec postgres psql -U llm -d llm_eval -f /004_run_metrics_view.sql
 ```
 
 Insert seed data:
