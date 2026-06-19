@@ -95,9 +95,9 @@ def test_create_run_inserts_and_returns_id():
 
 
 def test_insert_result_writes_all_eight_fields_in_order_and_commits():
-    conn, cur = _mock_conn()
+    conn, cur = _mock_conn(fetchone_value=(123,))
 
-    PostgresResultsRepository(conn).insert_result(
+    result_id = PostgresResultsRepository(conn).insert_result(
         run_id=10,
         model_id=3,
         case_id="canary-1",
@@ -108,12 +108,38 @@ def test_insert_result_writes_all_eight_fields_in_order_and_commits():
         cost=Decimal("0.000123"),
     )
 
+    assert result_id == 123
     sql, params = cur.execute.call_args.args
     assert "INSERT INTO results" in sql
+    assert "RETURNING id" in sql
     # Column list must be in the order the runner expects.
     assert "run_id, model_id, case_id, response," in sql
     assert "latency_ms, input_tokens, output_tokens, cost" in sql
     assert params == (10, 3, "canary-1", "hello", 420, 12, 8, Decimal("0.000123"))
+    conn.commit.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# update_judge
+# ---------------------------------------------------------------------------
+
+
+def test_update_judge_sets_score_and_reasoning_for_one_row_and_commits():
+    conn, cur = _mock_conn()
+
+    PostgresResultsRepository(conn).update_judge(
+        result_id=55,
+        judge_score=Decimal("3.5"),
+        judge_reasoning="presque correct",
+    )
+
+    sql, params = cur.execute.call_args.args
+    assert "UPDATE results" in sql
+    assert "judge_score = %s" in sql
+    assert "judge_reasoning = %s" in sql
+    assert "WHERE id = %s" in sql
+    # order must match the placeholders: score, reasoning, then the row id
+    assert params == (Decimal("3.5"), "presque correct", 55)
     conn.commit.assert_called_once()
 
 

@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import psycopg
-
+from app.judge import judge, to_db_scale
 from app.datasets import Case, Dataset, DatasetError, load_dataset
 from app.llm_client import MODEL_REGISTRY, LLMResponse, call_llm
 from app.prompts.repository import PostgresPromptRepository, PromptRepository
@@ -57,6 +57,7 @@ class TaskResult:
     main thread after futures resolve so the workers stay pure."""
 
     case_id: str
+    question: str
     model_row: ModelRow
     response: LLMResponse
 
@@ -141,6 +142,7 @@ def execute_run(
     repo: ResultsRepository,
     max_workers: int,
     temperature: float,
+    do_judge: bool = False,
     call: Callable[..., LLMResponse] = call_llm,
 ) -> RunOutcome:
     """Fan out every (case, model) call, persist each result as it returns.
@@ -160,7 +162,7 @@ def execute_run(
         provider = MODEL_REGISTRY[model_key].provider
         prompt = build_prompt(system_prompt, case.prompt)
         response = call(provider, model_key, prompt, temperature=temperature)
-        return TaskResult(case_id=case.id, model_row=model_row, response=response)
+        return TaskResult(case_id=case.id,question=case.prompt, model_row=model_row, response=response)
 
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
@@ -188,7 +190,7 @@ def execute_run(
                     model=result.model_row,
                 )
                 latency_ms = int(result.response.latency_ms)
-                repo.insert_result(
+                result_id = repo.insert_result(
                     run_id=run_id,
                     model_id=result.model_row.id,
                     case_id=result.case_id,
@@ -198,6 +200,23 @@ def execute_run(
                     output_tokens=result.response.tokens_out,
                     cost=cost,
                 )
+                if do_judge:
+                    # Judging is best-effort: a judge failure (bad verdict,
+                    # API quota, rate-limit, network) must never lose the
+                    # response row or kill the run — leave judge_score NULL.
+                    try:
+                        verdict = judge(result.question, result.response.content)
+                        repo.update_judge(
+                            result_id=result_id,
+                            judge_score=to_db_scale(verdict.score),
+                            judge_reasoning=verdict.reasoning,
+                        )
+                    except Exception as e:
+                        print(
+                            f"  ⚠ judge failed case={case_id!r} model={model_key!r} "
+                            f"→ {type(e).__name__}: {e}",
+                            file=sys.stderr,
+                        )
                 inserted += 1
                 total_cost += cost
                 total_input_tokens += result.response.tokens_in
@@ -274,6 +293,11 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         default=0.0,
         help="Sampling temperature (ignored by reasoning models).",
     )
+    parser.add_argument(
+        "--judge",
+        action="store_true",
+        help="Judge each response with Gemini and persist judge_score/judge_reasoning.",
+    )
     return parser.parse_args(argv)
 
 
@@ -323,6 +347,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             repo=results_repo,
             max_workers=args.max_workers,
             temperature=args.temperature,
+            do_judge=args.judge,
         )
 
         total = len(dataset.cases) * len(model_pairs)

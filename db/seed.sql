@@ -22,7 +22,9 @@ INSERT INTO models (provider, name, version, input_cost, output_cost) VALUES
     ('OpenAI',    'gpt-5',               '2025-08', 0.0000050,  0.0000150),
     ('OpenAI',    'o3',                  '2025-04', 0.0000150,  0.0000600),
     ('DeepSeek',  'deepseek-v4-flash',   '2026-05', 0.00000030, 0.0000010),
-    ('DeepSeek',  'deepseek-v4-pro',     '2026-05', 0.0000010,  0.0000030)
+    ('DeepSeek',  'deepseek-v4-pro',     '2026-05', 0.0000010,  0.0000030),
+    ('Google', 'gemini-2.5-pro',    '2025',     0.00000125,  0.0000100),
+    ('Google', 'gemini-2.5-flash',  '2025',     0.00000030,  0.0000025)
 ON CONFLICT (provider, name, version) DO NOTHING;
 
 -- Note : les prompts sont gérés par SCRUM-18 (sync depuis YAML) :

@@ -32,6 +32,10 @@ class ResultsRepository(Protocol):
 
     def create_run(self, prompt_id: int, dataset: str) -> int: ...
 
+    def update_judge(
+        self, *, result_id: int, judge_score: Decimal, judge_reasoning: str
+    ) -> None: ...
+
     def insert_result(
         self,
         *,
@@ -43,7 +47,7 @@ class ResultsRepository(Protocol):
         input_tokens: int,
         output_tokens: int,
         cost: Decimal,
-    ) -> None: ...
+    ) -> int: ...
 
     def finalize_run(self, run_id: int) -> None: ...
 
@@ -106,7 +110,7 @@ class PostgresResultsRepository:
         input_tokens: int,
         output_tokens: int,
         cost: Decimal,
-    ) -> None:
+    ) -> int:
         with self.conn.cursor() as cur:
             cur.execute(
                 """
@@ -114,6 +118,7 @@ class PostgresResultsRepository:
                     (run_id, model_id, case_id, response,
                      latency_ms, input_tokens, output_tokens, cost)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
                 """,
                 (
                     run_id,
@@ -125,6 +130,26 @@ class PostgresResultsRepository:
                     output_tokens,
                     cost,
                 ),
+            )        
+            returned_id = cur.fetchone()[0]
+        self.conn.commit()
+        return returned_id
+    
+    def update_judge(
+        self,
+        *,
+        result_id: int,
+        judge_score: Decimal,
+        judge_reasoning: str,
+    ) -> None:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE results
+                SET judge_score = %s, judge_reasoning = %s
+                WHERE id = %s
+                """,
+                (judge_score, judge_reasoning, result_id)
             )
         self.conn.commit()
 
