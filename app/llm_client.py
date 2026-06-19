@@ -17,6 +17,7 @@ class ApiSurface(str, Enum):
     MESSAGES = "messages"            # Anthropic
     CHAT_COMPLETIONS = "chat"        # OpenAI gpt-4o family, DeepSeek
     RESPONSES = "responses"          # OpenAI reasoning models (o-series, gpt-5)
+    GEMINI = "gemini"         
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,12 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     ),
     "deepseek-v4-pro": ModelSpec(
         "deepseek", "deepseek-v4-pro", ApiSurface.CHAT_COMPLETIONS, True, True
+    ),
+    "gemini-2.5-pro": ModelSpec(
+        "gemini","gemini-2.5-pro", ApiSurface.GEMINI, True, False
+    ),
+    "gemini-2.5-flash": ModelSpec(
+        "gemini", "gemini-2.5-flash", ApiSurface.GEMINI, True, False
     ),
 }
 
@@ -118,6 +125,40 @@ class AnthropicAdapter:
             reasoning=None,
             tokens_in=raw.usage.input_tokens,
             tokens_out=raw.usage.output_tokens,
+            latency_ms=latency_ms,
+            model_id=spec.api_id,
+            raw=raw,
+        )
+class GeminiAdapter:
+    def call(
+            self,
+            spec: ModelSpec,
+            prompt: str,
+            *,
+            max_tokens: int = 4096,
+            temperature: float = 0.0,
+    ) -> LLMResponse:
+        from google import genai
+
+        client = genai.Client(api_key=_require_env("GEMINI_API_KEY"))
+        kwargs: dict[str, Any] = {
+            "model": spec.api_id,
+            "contents": prompt,
+            "config": {
+                "max_output_tokens": max_tokens,
+                "temperature": temperature,
+            },
+        }
+
+        t0 = time.perf_counter()
+        raw = client.models.generate_content(**kwargs)
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+
+        return LLMResponse(
+            content=raw.text,
+            reasoning=None,
+            tokens_in=raw.usage_metadata.prompt_token_count,
+            tokens_out=raw.usage_metadata.candidates_token_count,
             latency_ms=latency_ms,
             model_id=spec.api_id,
             raw=raw,
@@ -259,6 +300,7 @@ _ADAPTERS: dict[str, Any] = {
     "anthropic": AnthropicAdapter(),
     "openai": OpenAIAdapter(),
     "deepseek": DeepSeekAdapter(),
+    "gemini": GeminiAdapter(), 
 }
 
 

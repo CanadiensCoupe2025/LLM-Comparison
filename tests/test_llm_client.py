@@ -23,7 +23,7 @@ from app.llm_client import (
 # ---------------------------------------------------------------------------
 
 
-def test_registry_lists_the_six_required_models():
+def test_registry_lists_the_eight_required_models():
     assert set(MODEL_REGISTRY.keys()) == {
         "claude-sonnet-4-6",
         "claude-opus-4-8",
@@ -31,14 +31,17 @@ def test_registry_lists_the_six_required_models():
         "o3",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
     }
 
 
-def test_registry_balances_two_models_per_provider():
+def test_registry_provider_counts():
     by_provider: dict[str, int] = {}
     for spec in MODEL_REGISTRY.values():
         by_provider[spec.provider] = by_provider.get(spec.provider, 0) + 1
-    assert by_provider == {"anthropic": 2, "openai": 2, "deepseek": 2}
+    # Two models each for the original three providers; Gemini pro + flash as judges.
+    assert by_provider == {"anthropic": 2, "openai": 2, "deepseek": 2, "gemini": 2}
 
 
 def test_openai_reasoning_models_disable_temperature():

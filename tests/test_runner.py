@@ -51,9 +51,11 @@ class FakeResultsRepository:
     def __init__(self, models: dict[str, ModelRow]):
         self._models = models
         self.inserts: list[_InsertedRow] = []
+        self.judge_updates: list[dict[str, Any]] = []
         self.runs: dict[int, dict[str, Any]] = {}
         self.finalized: set[int] = set()
         self._next_run_id = 100
+        self._next_result_id = 1
 
     def lookup_model(self, name: str) -> ModelRow:
         try:
@@ -67,8 +69,20 @@ class FakeResultsRepository:
         self.runs[rid] = {"prompt_id": prompt_id, "dataset": dataset}
         return rid
 
-    def insert_result(self, **kw) -> None:
+    def insert_result(self, **kw) -> int:
         self.inserts.append(_InsertedRow(**kw))
+        rid = self._next_result_id
+        self._next_result_id += 1
+        return rid
+
+    def update_judge(self, *, result_id: int, judge_score, judge_reasoning: str) -> None:
+        self.judge_updates.append(
+            {
+                "result_id": result_id,
+                "judge_score": judge_score,
+                "judge_reasoning": judge_reasoning,
+            }
+        )
 
     def finalize_run(self, run_id: int) -> None:
         self.finalized.add(run_id)
@@ -285,6 +299,120 @@ def test_execute_run_records_partial_failures_and_continues():
 
     assert (outcome.inserted, outcome.failed) == (1, 1)
     assert [r.case_id for r in repo.inserts] == ["c2"]
+
+
+def test_execute_run_judges_and_persists_scaled_score_when_enabled():
+    """With do_judge=True, the runner judges each answer and persists the
+    ×5-scaled score via update_judge. `app.runner.judge` is patched so no
+    Gemini call happens — this tests the runner's wiring, not the judge."""
+    from app.judge import JudgeVerdict, to_db_scale
+
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+    call = lambda *_a, **_k: _fake_response("Canberra.", 5, 3)
+
+    fake_verdict = JudgeVerdict(score=0.6, reasoning="presque correct", response="raw")
+    with patch("app.runner.judge", return_value=fake_verdict) as mock_judge:
+        outcome = execute_run(
+            dataset=_dataset([_case("c1", "Quelle est la capitale ?")]),
+            model_pairs=pairs,
+            system_prompt="SYS",
+            run_id=1,
+            repo=repo,
+            max_workers=1,
+            temperature=0.0,
+            do_judge=True,
+            call=call,
+        )
+
+    assert outcome.inserted == 1
+    # judge graded the candidate answer against the original question
+    mock_judge.assert_called_once()
+    q, a = mock_judge.call_args.args
+    assert q == "Quelle est la capitale ?"
+    assert a == "Canberra."
+    # the 0..1 score was scaled to 0..5 and persisted onto the inserted row
+    assert len(repo.judge_updates) == 1
+    assert repo.judge_updates[0]["judge_score"] == to_db_scale(0.6)  # Decimal("3.0")
+    assert repo.judge_updates[0]["judge_reasoning"] == "presque correct"
+
+
+def test_execute_run_keeps_row_but_skips_score_when_judge_fails():
+    """A JudgeParseError must not lose the response row — it's already
+    inserted; only the score is skipped (judge_score stays unset)."""
+    from app.judge import JudgeParseError
+
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+    call = lambda *_a, **_k: _fake_response("garbled", 1, 1)
+
+    with patch("app.runner.judge", side_effect=JudgeParseError("bad verdict")):
+        outcome = execute_run(
+            dataset=_dataset([_case("c1", "p")]),
+            model_pairs=pairs,
+            system_prompt="SYS",
+            run_id=1,
+            repo=repo,
+            max_workers=1,
+            temperature=0.0,
+            do_judge=True,
+            call=call,
+        )
+
+    assert outcome.inserted == 1        # response persisted despite judge failure
+    assert repo.judge_updates == []     # no score written
+
+
+def test_execute_run_survives_judge_api_error():
+    """A non-parse failure (e.g. a 429 from the judge API) must also be
+    swallowed — judging is best-effort and must never kill the run."""
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+    call = lambda *_a, **_k: _fake_response("ok", 1, 1)
+
+    with patch("app.runner.judge", side_effect=RuntimeError("429 RESOURCE_EXHAUSTED")):
+        outcome = execute_run(
+            dataset=_dataset([_case("c1", "p")]),
+            model_pairs=pairs,
+            system_prompt="SYS",
+            run_id=1,
+            repo=repo,
+            max_workers=1,
+            temperature=0.0,
+            do_judge=True,
+            call=call,
+        )
+
+    assert outcome.inserted == 1        # run completed, response kept
+    assert repo.judge_updates == []     # no score written
+
+
+def test_execute_run_does_not_judge_when_flag_off():
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+
+    with patch("app.runner.judge") as mock_judge:
+        execute_run(
+            dataset=_dataset([_case("c1", "p")]),
+            model_pairs=pairs,
+            system_prompt="SYS",
+            run_id=1,
+            repo=repo,
+            max_workers=1,
+            temperature=0.0,
+            call=lambda *_a, **_k: _fake_response("ok", 1, 1),
+        )
+
+    mock_judge.assert_not_called()      # do_judge defaults to False
+    assert repo.judge_updates == []
 
 
 def test_execute_run_finalizes_run_even_when_everything_fails():
