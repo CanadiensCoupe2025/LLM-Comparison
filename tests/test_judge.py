@@ -170,7 +170,7 @@ def test_judge_returns_parsed_verdict_via_injected_call():
     assert verdict.reasoning == "bonne réponse"
     # the judge always routes through the gemini provider
     assert captured["provider"] == "gemini"
-    assert captured["model"] == "gemini-2.5-flash"
+    assert captured["model"] == "gemini-2.5-pro"
     # the candidate answer is embedded in what we send the judge
     assert "Canberra." in captured["prompt"]
 
@@ -181,3 +181,48 @@ def test_judge_propagates_parse_error_on_garbage_output():
 
     with pytest.raises(JudgeParseError):
         judge("q", "a", rubric="RUBRIC", call=fake_call)
+
+
+# ---------------------------------------------------------------------------
+# judge — retry with backoff on transient API errors (429 / 503)
+# ---------------------------------------------------------------------------
+
+
+def test_judge_retries_transient_error_then_succeeds():
+    """A 503/429 blip is retried; a later success returns a verdict."""
+    calls = {"n": 0}
+    slept: list[float] = []
+
+    def flaky_call(provider, model, prompt, **kwargs):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("503 UNAVAILABLE: high demand")
+        return _resp('{"score": 0.7, "reasoning": "ok"}')
+
+    verdict = judge("q", "a", rubric="R", call=flaky_call, sleep=slept.append)
+
+    assert verdict.score == 0.7
+    assert calls["n"] == 3        # 2 failures + 1 success
+    assert len(slept) == 2        # backed off twice, with growing delays
+    assert slept[1] > slept[0]
+
+
+def test_judge_gives_up_after_max_retries():
+    def always_503(provider, model, prompt, **kwargs):
+        raise RuntimeError("503 UNAVAILABLE")
+
+    with pytest.raises(RuntimeError):
+        judge("q", "a", rubric="R", max_retries=2, call=always_503, sleep=lambda _s: None)
+
+
+def test_judge_does_not_retry_non_transient_error():
+    """A non-transient error (e.g. 400) fails fast — retrying wouldn't help."""
+    calls = {"n": 0}
+
+    def bad_request(provider, model, prompt, **kwargs):
+        calls["n"] += 1
+        raise RuntimeError("400 INVALID_ARGUMENT")
+
+    with pytest.raises(RuntimeError):
+        judge("q", "a", rubric="R", call=bad_request, sleep=lambda _s: None)
+    assert calls["n"] == 1        # no retry

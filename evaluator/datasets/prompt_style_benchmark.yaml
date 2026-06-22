@@ -1,0 +1,252 @@
+# ─────────────────────────────────────────────────────────────
+# LLMeter — Prompt-style benchmark (SCRUM-37)  ·  v2 (harder)
+# ─────────────────────────────────────────────────────────────
+# Measures which prompt STYLE maximizes each model's quality.
+# Each `group` is ONE base task rendered in ≥2 contrasting styles;
+# only the framing varies, so any score delta is attributable to
+# the style. Scored by the LLM judge (run with --judge).
+#
+# v2 raises difficulty so scores actually DISCRIMINATE between
+# styles and models (v1 tasks were too easy — every score was 5.0):
+#   - multi-step arithmetic with a trap (zero-shot tends to slip;
+#     few-shot / instructional CoT helps),
+#   - an ordering/deduction puzzle,
+#   - a denser extraction passage + a tempting unanswerable,
+#   - a code task with edge cases (empty list, single element, ties).
+#
+# Task content is ORIGINAL and license-clear, modeled on the
+# CATEGORY of canonical eval datasets (GSM8K, BIG-Bench Hard,
+# SQuAD 2.0, HumanEval) — NOT verbatim from them. See
+# docs/prompt_styles_sourced.md.
+#
+# regression_v2.yaml stays untouched — separate benchmark.
+# ─────────────────────────────────────────────────────────────
+
+dataset:
+  name: prompt_style_benchmark
+  version: 2
+  description: >
+    Per-model prompt-style benchmark (SCRUM-37), v2 — harder, discriminating
+    tasks across reasoning, deduction, extraction, and code. Groups share a
+    base task expressed in contrasting styles (zero-shot, few-shot,
+    instructional, contextual, role-based). Reference: docs/prompt_styles_sourced.md.
+  styles:
+    - zero-shot
+    - few-shot
+    - instructional
+    - contextual
+    - role-based
+
+cases:
+  # ===========================================================
+  # Group A — reasoning (multi-step arithmetic w/ a trap). Analog: GSM8K.
+  # A train: 60 km (1 h) + 90 km/h for 2 h (=180) + 30 min stop (0)
+  #          + 40 km/h for 90 min (=60)  →  total 300 km.
+  # Zero-shot models often mishandle the 50%-faster step or the stop.
+  # ===========================================================
+  - id: math-train-zeroshot
+    group: math-train
+    style: zero-shot
+    category: reasoning
+    source_dataset: gsm8k-style (original)
+    prompt: >-
+      A train travels 60 km in its first hour. For the next 2 hours it goes 50%
+      faster than that first-hour speed. It then stops for 30 minutes. Finally it
+      travels at 40 km/h for 90 minutes. What is the total distance travelled, in km?
+    expected:
+      check: contains
+      value: ["300"]
+    rationale: Multi-step; the 50%-faster leg and the stop are common zero-shot traps.
+
+  - id: math-train-fewshot
+    group: math-train
+    style: few-shot
+    category: reasoning
+    source_dataset: gsm8k-style (original)
+    prompt: |
+      Q: A cyclist rides 2 hours at 15 km/h, rests 1 hour, then rides 30 minutes at 20 km/h. Total distance?
+      A: 2 h × 15 = 30 km. Rest = 0 km. 0.5 h × 20 = 10 km. Total = 30 + 10 = 40 km. The answer is 40.
+
+      Q: A car drives 1 hour at 80 km/h, then 25% slower for 2 hours. Total distance?
+      A: First hour = 80 km. 25% slower = 60 km/h for 2 h = 120 km. Total = 80 + 120 = 200 km. The answer is 200.
+
+      Q: A train travels 60 km in its first hour. For the next 2 hours it goes 50% faster than that first-hour speed. It then stops for 30 minutes. Finally it travels at 40 km/h for 90 minutes. What is the total distance travelled, in km?
+      A:
+    expected:
+      check: contains
+      value: ["300"]
+    rationale: Few-shot CoT exemplars demonstrate the leg-by-leg method; delta vs zero-shot is the headline.
+
+  - id: math-train-instructional
+    group: math-train
+    style: instructional
+    category: reasoning
+    source_dataset: gsm8k-style (original)
+    prompt: |
+      Solve step by step. Compute the distance of each leg separately:
+      (1) the first hour, (2) the faster 2-hour leg, (3) the stop, (4) the final leg.
+      Then sum them and state the total on its own line.
+
+      A train travels 60 km in its first hour. For the next 2 hours it goes 50%
+      faster than that first-hour speed. It then stops for 30 minutes. Finally it
+      travels at 40 km/h for 90 minutes. What is the total distance travelled, in km?
+    expected:
+      check: contains
+      value: ["300"]
+    rationale: Explicit leg-by-leg procedure — tests instruction-following vs shortcutting.
+
+  # ===========================================================
+  # Group B — deduction / ordering puzzle. Analog: BIG-Bench Hard.
+  # Cara, Dan, Ana, Ben, Eve. Eve last; Dan immediately before Ana;
+  # Cara before Ana; Ana before Ben  →  order Cara, Dan, Ana, Ben, Eve.
+  # First = Cara.
+  # ===========================================================
+  - id: logic-race-zeroshot
+    group: logic-race
+    style: zero-shot
+    category: reasoning
+    source_dataset: bbh-style (original)
+    prompt: |
+      Five friends — Ana, Ben, Cara, Dan, and Eve — finished a race in some order.
+      Ana finished before Ben but after Cara. Eve finished last. Dan finished
+      immediately before Ana. Who finished first?
+    expected:
+      check: contains
+      value: ["Cara"]
+    rationale: Constraint-satisfaction puzzle; hard to do reliably without explicit steps.
+
+  - id: logic-race-instructional
+    group: logic-race
+    style: instructional
+    category: reasoning
+    source_dataset: bbh-style (original)
+    prompt: |
+      Work through the constraints one at a time. Place each friend relative to the
+      others, then write out the full finishing order from first to last, and state
+      who finished first on its own line.
+
+      Five friends — Ana, Ben, Cara, Dan, and Eve — finished a race in some order.
+      Ana finished before Ben but after Cara. Eve finished last. Dan finished
+      immediately before Ana. Who finished first?
+    expected:
+      check: contains
+      value: ["Cara"]
+    rationale: Same puzzle with an explicit reasoning procedure — should lift accuracy vs zero-shot.
+
+  # ===========================================================
+  # Group C — extraction. Analog: SQuAD 2.0. Denser passage; one
+  # answerable (reopened in 1974), one tempting unanswerable.
+  # ===========================================================
+  - id: extract-bridge-contextual
+    group: extract-bridge
+    style: contextual
+    category: extraction
+    source_dataset: squad2-style (original passage)
+    prompt: |
+      Read the passage and answer using only information it contains. If the passage
+      does not contain the answer, reply exactly: "Not in the passage."
+
+      Passage:
+      The Aldous Bridge, completed in 1932, spans the Verrin River for 1,200 metres.
+      It was financed by a public bond issue that was fully repaid by 1958. After a
+      partial collapse in 1971, the central span was rebuilt with steel from the
+      Hadley foundry, and the bridge reopened to traffic in 1974.
+
+      Question: In what year did the bridge reopen after the 1971 collapse?
+      Answer:
+    expected:
+      check: contains
+      value: ["1974"]
+    rationale: Answer present but surrounded by several distractor dates (1932, 1958, 1971).
+
+  - id: extract-bridge-zeroshot
+    group: extract-bridge
+    style: zero-shot
+    category: extraction
+    source_dataset: squad2-style (original passage)
+    prompt: |
+      The Aldous Bridge, completed in 1932, spans the Verrin River for 1,200 metres.
+      It was financed by a public bond issue that was fully repaid by 1958. After a
+      partial collapse in 1971, the central span was rebuilt with steel from the
+      Hadley foundry, and the bridge reopened to traffic in 1974.
+
+      In what year did the bridge reopen after the 1971 collapse?
+    expected:
+      check: contains
+      value: ["1974"]
+    rationale: Same passage + question, no grounding instruction — isolates the framing effect.
+
+  - id: extract-bridge-unanswerable-contextual
+    group: extract-bridge
+    style: contextual
+    category: extraction
+    source_dataset: squad2-style (original passage)
+    prompt: |
+      Read the passage and answer using only information it contains. If the passage
+      does not contain the answer, reply exactly: "Not in the passage."
+
+      Passage:
+      The Aldous Bridge, completed in 1932, spans the Verrin River for 1,200 metres.
+      It was financed by a public bond issue that was fully repaid by 1958. After a
+      partial collapse in 1971, the central span was rebuilt with steel from the
+      Hadley foundry, and the bridge reopened to traffic in 1974.
+
+      Question: How many vehicles cross the Aldous Bridge each day?
+      Answer:
+    expected:
+      check: contains
+      value: ["Not in the passage"]
+    rationale: Abstention trap — daily traffic is never stated; a grounded model must decline.
+
+  # ===========================================================
+  # Group D — code generation w/ edge cases. Analog: HumanEval.
+  # longest_run([1,1,2,2,2,3]) == 3 ; [] == 0 ; [5] == 1.
+  # ===========================================================
+  - id: code-longestrun-zeroshot
+    group: code-longestrun
+    style: zero-shot
+    category: code
+    source_dataset: humaneval-style (original spec)
+    prompt: |
+      Complete the following Python function. Return only the completed function.
+
+      def longest_run(nums):
+          """Return the length of the longest run of consecutive EQUAL integers
+          in nums. Return 0 for an empty list.
+          >>> longest_run([1, 1, 2, 2, 2, 3])
+          3
+          >>> longest_run([])
+          0
+          >>> longest_run([5])
+          1
+          """
+    expected:
+      check: contains
+      value: ["def longest_run"]
+    rationale: Edge cases (empty, single element, ties) catch shortcut implementations.
+
+  - id: code-longestrun-rolebased
+    group: code-longestrun
+    style: role-based
+    category: code
+    source_dataset: humaneval-style (original spec)
+    prompt: |
+      You are a principal software engineer who writes production-grade Python and
+      cares about correctness on edge cases above all else. Complete the following
+      function so it passes a rigorous test suite, including empty and single-element
+      inputs. Return only the completed function.
+
+      def longest_run(nums):
+          """Return the length of the longest run of consecutive EQUAL integers
+          in nums. Return 0 for an empty list.
+          >>> longest_run([1, 1, 2, 2, 2, 3])
+          3
+          >>> longest_run([])
+          0
+          >>> longest_run([5])
+          1
+          """
+    expected:
+      check: contains
+      value: ["def longest_run"]
+    rationale: Identical spec under an expert persona — any quality movement is the role effect.

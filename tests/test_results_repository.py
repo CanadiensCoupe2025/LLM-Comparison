@@ -94,18 +94,20 @@ def test_create_run_inserts_and_returns_id():
 # ---------------------------------------------------------------------------
 
 
-def test_insert_result_writes_all_eight_fields_in_order_and_commits():
+def test_insert_result_writes_all_fields_in_order_and_commits():
     conn, cur = _mock_conn(fetchone_value=(123,))
 
     result_id = PostgresResultsRepository(conn).insert_result(
         run_id=10,
         model_id=3,
         case_id="canary-1",
+        question="hello?",
         response="hello",
         latency_ms=420,
         input_tokens=12,
         output_tokens=8,
         cost=Decimal("0.000123"),
+        prompt_style="few-shot",
     )
 
     assert result_id == 123
@@ -113,10 +115,24 @@ def test_insert_result_writes_all_eight_fields_in_order_and_commits():
     assert "INSERT INTO results" in sql
     assert "RETURNING id" in sql
     # Column list must be in the order the runner expects.
-    assert "run_id, model_id, case_id, response," in sql
+    assert "run_id, model_id, case_id, question, response," in sql
     assert "latency_ms, input_tokens, output_tokens, cost" in sql
-    assert params == (10, 3, "canary-1", "hello", 420, 12, 8, Decimal("0.000123"))
+    assert "prompt_style" in sql
+    assert params == (
+        10, 3, "canary-1", "hello?", "hello", 420, 12, 8, Decimal("0.000123"), "few-shot",
+    )
     conn.commit.assert_called_once()
+
+
+def test_insert_result_defaults_prompt_style_to_none():
+    """Non-benchmark runs don't pass a style — it must persist as NULL."""
+    conn, cur = _mock_conn(fetchone_value=(1,))
+    PostgresResultsRepository(conn).insert_result(
+        run_id=1, model_id=1, case_id="c", response="r",
+        latency_ms=1, input_tokens=1, output_tokens=1, cost=Decimal("0"),
+    )
+    _, params = cur.execute.call_args.args
+    assert params[-1] is None  # prompt_style
 
 
 # ---------------------------------------------------------------------------

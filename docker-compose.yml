@@ -30,6 +30,10 @@ services:
     env_file: .env
     volumes:
       - grafdata:/var/lib/grafana
+      # Provisioning (SCRUM-37): datasource + dashboard-provider configs.
+      - ./dashboard/provisioning:/etc/grafana/provisioning
+      # Dashboard JSON files loaded by the file provider in dashboards.yml.
+      - ./dashboard:/var/lib/grafana/dashboards
     depends_on:
       - postgres
 

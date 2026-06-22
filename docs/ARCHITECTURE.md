@@ -2,7 +2,7 @@
 
 > **Référence Jira :** SCRUM-36 — *Créer document d'architecture basé sur le backlog*
 > **Projet :** SCRUM — *My Software Team*
-> **Statut du document :** Brouillon à réviser (voir §11)
+> **Statut du document :** Révisé — réconcilié avec l'implémentation (sprint en cours) ; voir §11
 > **Périmètre :** Architecture cible dérivée du product backlog (épics SCRUM-10 à SCRUM-13 et stories associées)
 
 ---
@@ -17,7 +17,7 @@ Chaque section est traçable vers les items du backlog ; la matrice de traçabil
 
 ## 2. Vue d'ensemble
 
-La plateforme est un **banc d'essai automatisé pour modèles de langage (LLM)**. Elle permet d'exécuter un même prompt contre plusieurs modèles (Claude, OpenAI), de mesurer et comparer leurs performances (qualité, latence, coût), de stocker l'historique complet des exécutions, et de détecter automatiquement les régressions de qualité à chaque modification de code.
+La plateforme est un **banc d'essai automatisé pour modèles de langage (LLM)**. Elle permet d'exécuter un même prompt contre plusieurs modèles (Claude, OpenAI, DeepSeek, Gemini), de mesurer et comparer leurs performances (qualité, latence, coût), de stocker l'historique complet des exécutions, et de détecter automatiquement les régressions de qualité à chaque modification de code.
 
 Le projet suit une progression en quatre temps, reflétée par les épics :
 
@@ -36,11 +36,12 @@ Principe directeur tiré du backlog : *tout doit fonctionner en local avant de p
 
 Besoins fonctionnels :
 
-- **B1 — Abstraction multi-fournisseurs :** appeler Claude et OpenAI via une interface commune, extensible à de nouveaux modèles sans toucher au reste du code (SCRUM-17).
+- **B1 — Abstraction multi-fournisseurs :** appeler Claude, OpenAI, DeepSeek et Gemini via une interface commune (registre de modèles + adaptateurs par fournisseur), extensible à de nouveaux modèles sans toucher au reste du code (SCRUM-17, Gemini ajouté en SCRUM-23).
 - **B2 — Versioning des prompts :** tracer quelle version d'un prompt a produit quels résultats, via YAML + hash (SCRUM-18).
 - **B3 — Exécution comparative :** lancer un prompt contre N modèles en parallèle et stocker chaque résultat (SCRUM-19).
-- **B4 — Métriques :** mesurer latence, tokens, coût (SCRUM-22) et qualité via LLM-as-judge sur 5 (SCRUM-23) ; la similarité cosinus est citée au niveau épic (SCRUM-11) comme métrique de qualité complémentaire.
+- **B4 — Métriques :** mesurer latence, tokens, coût (SCRUM-22) et qualité via LLM-as-judge **(Gemini)** sur une échelle 0–5 (SCRUM-23) ; la similarité cosinus est citée au niveau épic (SCRUM-11) comme métrique de qualité complémentaire.
 - **B5 — Datasets de test versionnés :** suite de cas reproductibles en YAML, chargés sans modifier le code (SCRUM-24).
+- **B5b — Benchmark de styles de prompting :** comparer l'impact du style de prompt (zero-shot, few-shot, instructional, contextuel, role-based) sur la qualité, par modèle (SCRUM-37).
 - **B6 — Détection de régression en CI :** rejouer la suite d'évaluations sur chaque PR et bloquer si la qualité passe sous un seuil (SCRUM-25), avec rapport posté en commentaire (SCRUM-26).
 - **B7 — Visualisation :** dashboard comparatif par modèle (SCRUM-30) et alertes sur régression (SCRUM-31).
 
@@ -72,13 +73,15 @@ flowchart TB
         RUN[Evaluation Runner<br/>SCRUM-19]
         LLM[LLM Client<br/>interface commune<br/>SCRUM-17]
         MET[Module Métriques<br/>latence / tokens / coût<br/>SCRUM-22]
-        JUDGE[LLM-as-Judge<br/>score qualité 1-5<br/>SCRUM-23]
+        JUDGE[LLM-as-Judge<br/>Gemini · score 0-5<br/>SCRUM-23]
         LOG[Logging structuré JSON<br/>SCRUM-32]
     end
 
     subgraph Providers["Fournisseurs LLM externes"]
         CLAUDE[(Anthropic Claude)]
         OPENAI[(OpenAI)]
+        DEEPSEEK[(DeepSeek)]
+        GEMINI[(Google Gemini<br/>juge)]
     end
 
     subgraph Data["Persistance"]
@@ -96,6 +99,8 @@ flowchart TB
     RUN --> LLM
     LLM --> CLAUDE
     LLM --> OPENAI
+    LLM --> DEEPSEEK
+    LLM --> GEMINI
     RUN --> MET
     RUN --> JUDGE
     JUDGE --> LLM
@@ -113,7 +118,7 @@ flowchart TB
 ## 5. Composants principaux et responsabilités
 
 ### 5.1 LLM Client (`llm_client.py`) — SCRUM-17
-Point d'entrée unique vers les fournisseurs. Expose `call_llm(provider, model, prompt)` et masque les différences entre Claude et OpenAI. Lit les clés API exclusivement depuis l'environnement. C'est le point d'extension pour ajouter un nouveau modèle.
+Point d'entrée unique vers les fournisseurs. Expose `call_llm(provider, model, prompt)` et masque les différences entre Claude, OpenAI, DeepSeek et Gemini. Repose sur un **registre de modèles** (`MODEL_REGISTRY`) et un **adaptateur par fournisseur** (Anthropic, OpenAI, DeepSeek, Gemini) ; ajouter un modèle = ajouter une entrée au registre. Lit les clés API exclusivement depuis l'environnement.
 
 ### 5.2 Prompt Registry — SCRUM-18
 Gère les prompts comme des artefacts versionnés : fichiers YAML avec champ `version`, hash dérivé du contenu, et historique consultable en base. Toute modification de contenu génère une nouvelle version, garantissant la traçabilité « quel prompt a produit quel résultat ».
@@ -128,7 +133,10 @@ Orchestrateur principal. Prend un dataset et une liste de modèles, parallélise
 Calcule pour chaque appel : latence (ms), tokens (entrée + sortie), coût estimé selon les tarifs publics du fournisseur. Ces valeurs sont attachées à chaque enregistrement de résultat.
 
 ### 5.6 LLM-as-Judge — SCRUM-23
-Métrique de qualité automatisée : Claude évalue les réponses des autres modèles sur 1–5 avec justification courte. Le prompt du juge est lui-même versionné (cf. 5.2) et son coût est comptabilisé séparément. *Métrique complémentaire prévue au niveau épic (SCRUM-11) : similarité cosinus entre réponse produite et réponse attendue.*
+Métrique de qualité automatisée : **Gemini** (par défaut `gemini-2.5-pro`) évalue les réponses des autres modèles et retourne un **score brut dans [0,1] + une justification courte** en JSON strict. Le score est **mis à l'échelle ×5** au moment de la persistance et stocké sur **0–5** dans `results.judge_score` (seuil d'alerte de régression à 3,5/5). Le prompt du juge (rubrique) est lui-même versionné (cf. 5.2). Le scoring est **best-effort** : un échec du juge (verdict mal formé, quota API) est journalisé et laisse `judge_score` à NULL sans interrompre le run ni perdre la réponse. *Métrique complémentaire prévue au niveau épic (SCRUM-11) : similarité cosinus entre réponse produite et réponse attendue.*
+
+### 5.6b Benchmark de styles de prompting — SCRUM-37
+Dataset séparé (`prompt_style_benchmark.yaml`) regroupant une même tâche de base déclinée en plusieurs styles (zero-shot, few-shot, instructional, contextuel, role-based). Le runner persiste le style de chaque réponse (colonne `results.prompt_style`) afin d'agréger la qualité (score juge) **par style et par modèle**. `regression_v2.yaml` reste inchangé — il s'agit d'un benchmark, pas d'une suite de non-régression.
 
 ### 5.7 Persistance PostgreSQL — SCRUM-16
 Stockage relationnel de l'historique complet (voir §6). Source de vérité pour l'analyse et l'alimentation de Grafana.
@@ -156,9 +164,9 @@ Quatre tables principales, reliées par clés étrangères :
 | `models` | Catalogue des modèles évalués (fournisseur, nom, tarifs) | référencée par `results` |
 | `prompts` | Prompts versionnés (version, hash, contenu) | référencée par `runs` |
 | `runs` | Une exécution d'évaluation (dataset, horodatage, prompt utilisé) | référence `prompts` ; parent de `results` |
-| `results` | Résultat par modèle pour un run (réponse, latence, tokens, coût, score juge + justification) | référence `runs` et `models` |
+| `results` | Résultat par modèle pour un run (réponse, `case_id`, latence, tokens, coût, `judge_score` + `judge_reasoning`, `prompt_style`) | référence `runs` et `models` |
 
-Un script SQL versionné crée le schéma ; un script de seed insère des données de test ; le schéma est documenté dans un README technique.
+Le schéma de base est créé par un script versionné, complété par des **migrations numérotées** : `003` (`case_id`), `004` (vue d'agrégation `run_metrics`), `005` (`prompt_style` pour le benchmark SCRUM-37). Un script de seed insère le catalogue de modèles (dont Gemini) ; le schéma est documenté dans un README technique. La vue `run_metrics` agrège coût/latence/tokens par run ; une vue d'agrégation par style (score moyen par `prompt_style` × modèle) alimente le dashboard (SCRUM-37 / SCRUM-30).
 
 ---
 
@@ -185,8 +193,8 @@ sequenceDiagram
         LLM-->>CLI: Réponse normalisée
     end
     CLI->>M: Calculer latence / tokens / coût
-    CLI->>J: Évaluer qualité (score 1-5 + justif.)
-    J->>LLM: Appel du juge (Claude)
+    CLI->>J: Évaluer qualité (score 0-5 + justif.)
+    J->>LLM: Appel du juge (Gemini)
     CLI->>DB: Enregistrer results (réponse + métriques + score)
     DB-->>CLI: Confirmation
 ```
@@ -218,7 +226,7 @@ flowchart LR
 | Conteneurisation locale | **Docker Compose** | Démarrage de l'environnement complet sans installation manuelle (SCRUM-15) |
 | Versioning prompts/datasets | **YAML + hash, dans Git** | Reproductibilité et traçabilité « prompt → résultat » (SCRUM-18, SCRUM-24) |
 | Abstraction modèles | **Interface `call_llm` commune** | Ajout de modèles sans impact sur le reste du code (SCRUM-17) |
-| Qualité automatisée | **LLM-as-judge (Claude)** + similarité cosinus | Métrique reproductible et automatisable, complétée par une mesure objective (SCRUM-23, SCRUM-11) |
+| Qualité automatisée | **LLM-as-judge (Gemini)** + similarité cosinus | Métrique reproductible et automatisable, complétée par une mesure objective (SCRUM-23, SCRUM-11) |
 | CI/CD | **GitHub Actions** | Évaluations et gate de qualité sur chaque PR, secrets gérés nativement (SCRUM-25/26/28) |
 | Hébergement | **Azure Container Apps + ACR + PostgreSQL Flexible Server** | Déploiement conteneurisé managé, deux environnements (SCRUM-12, SCRUM-27/28) |
 | IaC | **Bicep** (→ Terraform en bonus) | Environnement recréable en une commande ; Terraform pour pratiquer le standard industrie (SCRUM-27, SCRUM-29) |
@@ -261,14 +269,16 @@ flowchart LR
 | SCRUM-32 Logging JSON | Logging structuré (§5.8) |
 | SCRUM-33 RUNBOOK/README | Référence ce document pour la partie « architecture overview » |
 | SCRUM-34 Démo & review | Livrable final illustrant les flux §7 |
+| SCRUM-37 Benchmark styles de prompting | Benchmark de styles (§5.6b) + colonne `results.prompt_style` (§6) |
 
 ---
 
 ## 11. Hypothèses et points ouverts (à valider en revue)
 
-1. La **similarité cosinus** (citée dans l'épic SCRUM-11) n'a pas de story dédiée — à confirmer : métrique distincte ou regroupée avec un autre item ?
+1. La **similarité cosinus** (citée dans l'épic SCRUM-11) n'a pas de story dédiée — à confirmer : métrique distincte ou regroupée avec un autre item ? *(Non encore implémentée.)*
+1b. **Modèle juge — décision actée :** le juge est **Gemini** (et non Claude comme envisagé initialement) ; SCRUM-23 a été mis à jour en conséquence. Le suivi du coût du juge séparément a été retiré du périmètre de SCRUM-23.
 2. Les **tarifs des modèles** sont supposés stockés/maintenus côté table `models` ; le mode de mise à jour reste à préciser.
 3. Le **modèle de branches** (SCRUM-14, develop → staging) est supposé GitFlow simplifié — à confirmer.
 4. Le **canal de notification des alertes** (email vs webhook, SCRUM-31) reste à arrêter.
 
-> **DoD restant pour SCRUM-36 :** ce document doit être stocké à l'endroit convenu et versionné (ex. `docs/ARCHITECTURE.md` du monorepo), puis revu et validé par au moins une autre personne.
+> **Note de statut :** ce document est versionné dans `docs/ARCHITECTURE.md` (DoD SCRUM-36) et a été **réconcilié avec l'implémentation** (juge Gemini, fournisseurs DeepSeek/Gemini, échelle 0–5, colonnes `case_id`/`prompt_style`, benchmark SCRUM-37). Les sections CI/CD (§5.9), Azure/IaC (§5.10) et Observabilité (§5.11) décrivent l'**architecture cible** : stories planifiées (SCRUM-25 à 32) non encore implémentées. Revue par un pair restant à effectuer.

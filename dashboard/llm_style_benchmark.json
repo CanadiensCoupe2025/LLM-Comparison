@@ -1,0 +1,128 @@
+{
+  "uid": "llm-style-benchmark",
+  "title": "LLM Prompt-Style Benchmark",
+  "tags": ["llmeter", "scrum-37"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-30d", "to": "now" },
+  "timezone": "browser",
+  "refresh": "",
+  "panels": [
+    {
+      "id": 1,
+      "type": "barchart",
+      "title": "Moyenne de scores par style de prompt par modèle",
+      "description": "Score moyen du juge (0-5) par style de prompt, une serie par modele. Source : vue style_metrics.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT prompt_style,\n  MAX(avg_judge_score) FILTER (WHERE model = 'claude-sonnet-4-6') AS \"claude-sonnet-4-6\",\n  MAX(avg_judge_score) FILTER (WHERE model = 'gpt-5')            AS \"gpt-5\"\nFROM style_metrics\nGROUP BY prompt_style\nORDER BY prompt_style;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 5,
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisLabel": "avg judge score (0-5)",
+            "axisPlacement": "auto",
+            "gradientMode": "none"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xField": "prompt_style",
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "right",
+          "calcs": []
+        },
+        "tooltip": { "mode": "single", "sort": "none" }
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Detailed results / logs (question, response, judge)",
+      "description": "One row per judged benchmark result: the question asked, the model response, and the judge's score + reasoning. Source: results joined to models, benchmark rows only.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT\n  res.created_at      AS \"created_at\",\n  res.case_id         AS \"case_id\",\n  m.name              AS \"model\",\n  res.prompt_style    AS \"prompt_style\",\n  res.question        AS \"question\",\n  res.response        AS \"response\",\n  res.judge_score     AS \"judge_score\",\n  res.judge_reasoning AS \"judge_reasoning\"\nFROM results res\nJOIN models m ON m.id = res.model_id\nWHERE res.prompt_style IS NOT NULL\nORDER BY res.created_at DESC\nLIMIT 500;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": { "type": "auto", "wrapText": true },
+            "inspect": true,
+            "filterable": true,
+            "minWidth": 80
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "created_at" },
+            "properties": [
+              { "id": "custom.width", "value": 160 },
+              { "id": "unit", "value": "time:YYYY-MM-DD HH:mm:ss" }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "case_id" }, "properties": [{ "id": "custom.width", "value": 170 }] },
+          { "matcher": { "id": "byName", "options": "model" }, "properties": [{ "id": "custom.width", "value": 150 }] },
+          { "matcher": { "id": "byName", "options": "prompt_style" }, "properties": [{ "id": "custom.width", "value": 120 }] },
+          { "matcher": { "id": "byName", "options": "question" }, "properties": [{ "id": "custom.width", "value": 320 }] },
+          { "matcher": { "id": "byName", "options": "response" }, "properties": [{ "id": "custom.width", "value": 420 }] },
+          {
+            "matcher": { "id": "byName", "options": "judge_score" },
+            "properties": [
+              { "id": "custom.width", "value": 110 },
+              { "id": "min", "value": 0 },
+              { "id": "max", "value": 5 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "value": null, "color": "red" },
+                    { "value": 2.5, "color": "orange" },
+                    { "value": 4, "color": "green" }
+                  ]
+                }
+              }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "judge_reasoning" }, "properties": [{ "id": "custom.width", "value": 420 }] }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "md",
+        "footer": { "show": false, "reducer": ["sum"], "countRows": false, "fields": "" },
+        "sortBy": [{ "displayName": "created_at", "desc": true }]
+      }
+    }
+  ]
+}
