@@ -47,6 +47,9 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     "claude-opus-4-8": ModelSpec(
         "anthropic", "claude-opus-4-8", ApiSurface.MESSAGES, False, False
     ),
+    "claude-haiku-4-5": ModelSpec(
+        "anthropic", "claude-haiku-4-5-20251001", ApiSurface.MESSAGES, True, False
+    ),
     "gpt-5": ModelSpec(
         "openai", "gpt-5-2025-08-07", ApiSurface.RESPONSES, False, True
     ),

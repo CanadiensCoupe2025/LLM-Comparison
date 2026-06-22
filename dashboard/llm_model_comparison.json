@@ -1,0 +1,121 @@
+{
+  "uid": "llm-model-comparison",
+  "title": "LLM Model Comparison",
+  "tags": ["llmeter", "scrum-30"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-30d", "to": "now" },
+  "timezone": "browser",
+  "refresh": "",
+  "panels": [
+    {
+      "id": 1,
+      "type": "barchart",
+      "title": "Avg latency per model (ms)",
+      "description": "Mean response latency per model across all evaluations. Source: model_metrics.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT model, avg_latency_ms\nFROM model_metrics\nORDER BY avg_latency_ms;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 1, "fillOpacity": 80, "axisLabel": "avg latency (ms)", "gradientMode": "none" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "model",
+        "colorByField": "model",
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "legend": { "showLegend": false, "displayMode": "list", "placement": "right", "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none" }
+      }
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "Avg judge score per model (0-5)",
+      "description": "Mean judge quality score per model (judged results only). Source: model_metrics.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT model, avg_judge_score\nFROM model_metrics\nWHERE avg_judge_score IS NOT NULL\nORDER BY avg_judge_score DESC;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 5,
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 1, "fillOpacity": 80, "axisLabel": "avg judge score (0-5)", "gradientMode": "none" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "model",
+        "colorByField": "model",
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "legend": { "showLegend": false, "displayMode": "list", "placement": "right", "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "barchart",
+      "title": "Cumulative cost per model (USD)",
+      "description": "Total cost per model across all evaluations. Source: model_metrics.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT model, total_cost\nFROM model_metrics\nORDER BY total_cost DESC;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 5,
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 1, "fillOpacity": 80, "axisLabel": "total cost (USD)", "gradientMode": "none" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "model",
+        "colorByField": "model",
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "legend": { "showLegend": false, "displayMode": "list", "placement": "right", "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none" }
+      }
+    }
+  ]
+}

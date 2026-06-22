@@ -21,7 +21,7 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT prompt_style,\n  MAX(avg_judge_score) FILTER (WHERE model = 'claude-sonnet-4-6') AS \"claude-sonnet-4-6\",\n  MAX(avg_judge_score) FILTER (WHERE model = 'gpt-5')            AS \"gpt-5\"\nFROM style_metrics\nGROUP BY prompt_style\nORDER BY prompt_style;"
+          "rawSql": "SELECT prompt_style,\n  MAX(avg_judge_score) FILTER (WHERE model = 'claude-sonnet-4-6') AS \"claude-sonnet-4-6\",\n  MAX(avg_judge_score) FILTER (WHERE model = 'gpt-5')            AS \"gpt-5\",\n  MAX(avg_judge_score) FILTER (WHERE model = 'claude-haiku-4-5') AS \"claude-haiku-4-5\"\nFROM style_metrics\nGROUP BY prompt_style\nORDER BY prompt_style;"
         }
       ],
       "fieldConfig": {

@@ -19,6 +19,7 @@
 INSERT INTO models (provider, name, version, input_cost, output_cost) VALUES
     ('Anthropic', 'claude-sonnet-4-6',   '2025-09', 0.0000030,  0.0000150),
     ('Anthropic', 'claude-opus-4-8',     '2026-01', 0.0000150,  0.0000750),
+    ('Anthropic', 'claude-haiku-4-5',    '2025-10', 0.0000010,  0.0000050),
     ('OpenAI',    'gpt-5',               '2025-08', 0.0000050,  0.0000150),
     ('OpenAI',    'o3',                  '2025-04', 0.0000150,  0.0000600),
     ('DeepSeek',  'deepseek-v4-flash',   '2026-05', 0.00000030, 0.0000010),
