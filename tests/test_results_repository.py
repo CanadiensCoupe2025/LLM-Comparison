@@ -101,6 +101,7 @@ def test_insert_result_writes_all_fields_in_order_and_commits():
         run_id=10,
         model_id=3,
         case_id="canary-1",
+        question="hello?",
         response="hello",
         latency_ms=420,
         input_tokens=12,
@@ -114,10 +115,12 @@ def test_insert_result_writes_all_fields_in_order_and_commits():
     assert "INSERT INTO results" in sql
     assert "RETURNING id" in sql
     # Column list must be in the order the runner expects.
-    assert "run_id, model_id, case_id, response," in sql
+    assert "run_id, model_id, case_id, question, response," in sql
     assert "latency_ms, input_tokens, output_tokens, cost" in sql
     assert "prompt_style" in sql
-    assert params == (10, 3, "canary-1", "hello", 420, 12, 8, Decimal("0.000123"), "few-shot")
+    assert params == (
+        10, 3, "canary-1", "hello?", "hello", 420, 12, 8, Decimal("0.000123"), "few-shot",
+    )
     conn.commit.assert_called_once()
 
 

@@ -21,7 +21,8 @@ import argparse
 import concurrent.futures
 import os
 import sys
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Optional
@@ -79,6 +80,17 @@ class RunOutcome:
     total_input_tokens: int
     total_output_tokens: int
     latencies_ms: list[int]
+    # SCRUM-37: scaled (0–5) judge scores bucketed by (model_key, prompt_style),
+    # populated only on judged benchmark runs. Empty otherwise.
+    style_scores: dict[tuple[str, str], list[Decimal]] = field(default_factory=dict)
+
+    def style_averages(self) -> dict[tuple[str, str], float]:
+        """Mean judge score per (model, style). Skips empty buckets."""
+        return {
+            key: float(sum(scores) / len(scores))
+            for key, scores in self.style_scores.items()
+            if scores
+        }
 
     @property
     def avg_latency_ms(self) -> float:
@@ -144,6 +156,7 @@ def execute_run(
     max_workers: int,
     temperature: float,
     do_judge: bool = False,
+    judge_min_interval: float = 0.0,
     call: Callable[..., LLMResponse] = call_llm,
 ) -> RunOutcome:
     """Fan out every (case, model) call, persist each result as it returns.
@@ -158,6 +171,9 @@ def execute_run(
     total_input_tokens = 0
     total_output_tokens = 0
     latencies_ms: list[int] = []
+    style_scores: dict[tuple[str, str], list[Decimal]] = {}
+    # Rate-limit throttle: timestamp of the last judge call (monotonic clock).
+    last_judge_at: Optional[float] = None
 
     def task(case: Case, model_key: str, model_row: ModelRow) -> TaskResult:
         provider = MODEL_REGISTRY[model_key].provider
@@ -201,6 +217,7 @@ def execute_run(
                     run_id=run_id,
                     model_id=result.model_row.id,
                     case_id=result.case_id,
+                    question=result.question,
                     response=result.response.content,
                     latency_ms=latency_ms,
                     input_tokens=result.response.tokens_in,
@@ -209,22 +226,35 @@ def execute_run(
                     prompt_style=result.prompt_style,
                 )
                 if do_judge:
+                    # Throttle judge calls to respect the provider's rate limit
+                    # (e.g. Gemini free tier = 5/min → set interval ~13s). The
+                    # run is slower but completes without 429 failures.
+                    if judge_min_interval > 0 and last_judge_at is not None:
+                        wait = judge_min_interval - (time.monotonic() - last_judge_at)
+                        if wait > 0:
+                            time.sleep(wait)
                     # Judging is best-effort: a judge failure (bad verdict,
                     # API quota, rate-limit, network) must never lose the
                     # response row or kill the run — leave judge_score NULL.
                     try:
                         verdict = judge(result.question, result.response.content)
+                        scaled = to_db_scale(verdict.score)
                         repo.update_judge(
                             result_id=result_id,
-                            judge_score=to_db_scale(verdict.score),
+                            judge_score=scaled,
                             judge_reasoning=verdict.reasoning,
                         )
+                        if result.prompt_style:
+                            style_scores.setdefault(
+                                (model_key, result.prompt_style), []
+                            ).append(scaled)
                     except Exception as e:
                         print(
                             f"  ⚠ judge failed case={case_id!r} model={model_key!r} "
                             f"→ {type(e).__name__}: {e}",
                             file=sys.stderr,
                         )
+                    last_judge_at = time.monotonic()
                 inserted += 1
                 total_cost += cost
                 total_input_tokens += result.response.tokens_in
@@ -245,6 +275,7 @@ def execute_run(
         total_input_tokens=total_input_tokens,
         total_output_tokens=total_output_tokens,
         latencies_ms=latencies_ms,
+        style_scores=style_scores,
     )
 
 
@@ -306,7 +337,35 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Judge each response with Gemini and persist judge_score/judge_reasoning.",
     )
+    parser.add_argument(
+        "--judge-min-interval",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="Minimum seconds between judge calls (rate-limit throttle). "
+        "0 = no throttle. Gemini free tier (5/min) → use ~13.",
+    )
     return parser.parse_args(argv)
+
+
+def _print_style_summary(outcome: RunOutcome) -> None:
+    """Print the per-(model, style) average judge score (SCRUM-37).
+
+    No-op when the run wasn't a judged benchmark (no style buckets).
+    """
+    averages = outcome.style_averages()
+    if not averages:
+        return
+    print("\nAvg judge score by prompt style (0–5):")
+    by_model: dict[str, list[tuple[str, float]]] = {}
+    for (model_key, style), avg in sorted(averages.items()):
+        by_model.setdefault(model_key, []).append((style, avg))
+    for model_key in sorted(by_model):
+        parts = "  ".join(
+            f"{style}={avg:.1f} (n={len(outcome.style_scores[(model_key, style)])})"
+            for style, avg in by_model[model_key]
+        )
+        print(f"  {model_key}: {parts}")
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -356,6 +415,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             max_workers=args.max_workers,
             temperature=args.temperature,
             do_judge=args.judge,
+            judge_min_interval=args.judge_min_interval,
         )
 
         total = len(dataset.cases) * len(model_pairs)
@@ -367,6 +427,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 f"latency min/avg/max={outcome.min_latency_ms}/"
                 f"{outcome.avg_latency_ms:.0f}/{outcome.max_latency_ms} ms"
             )
+        _print_style_summary(outcome)
         return EXIT_PARTIAL_FAILURE if outcome.failed else EXIT_OK
     finally:
         conn.close()

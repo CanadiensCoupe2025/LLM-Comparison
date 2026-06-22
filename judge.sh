@@ -17,6 +17,9 @@ cd "$REPO_ROOT"
 
 PY=".venv/bin/python"
 DATASET="${DATASET:-evaluator/datasets/sprint1_smoke.yaml}"
+# Throttle judge calls to respect the provider rate limit (Gemini free = 5/min).
+# Set JUDGE_MIN_INTERVAL=13 for an unattended multi-model benchmark run.
+JUDGE_MIN_INTERVAL="${JUDGE_MIN_INTERVAL:-0}"
 # Models: any args passed to the script, else a single cheap default.
 if [[ $# -gt 0 ]]; then MODELS=("$@"); else MODELS=(claude-sonnet-4-6); fi
 
@@ -38,4 +41,5 @@ exec "$PY" runner.py \
   --dataset "$DATASET" \
   --models "${MODELS[@]}" \
   --judge \
+  --judge-min-interval "$JUDGE_MIN_INTERVAL" \
   --max-workers 2

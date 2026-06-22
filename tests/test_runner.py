@@ -43,6 +43,7 @@ class _InsertedRow:
     input_tokens: int
     output_tokens: int
     cost: Decimal
+    question: str | None = None
     prompt_style: str | None = None
 
 
@@ -442,6 +443,117 @@ def test_execute_run_prompt_style_none_for_unstyled_case():
     assert repo.inserts[0].prompt_style is None
 
 
+def test_execute_run_aggregates_judge_scores_by_style():
+    """SCRUM-37 Phase 3: judged benchmark scores are bucketed by
+    (model, prompt_style) and averaged for the per-style summary."""
+    from app.judge import JudgeVerdict, to_db_scale
+
+    def _styled(cid, style):
+        # prompt == style, so the patched judge (which receives the case
+        # prompt as `question`) can map each case to a deterministic score.
+        return Case(id=cid, prompt=style, raw={"id": cid, "prompt": style, "style": style})
+
+    cases = [_styled("a-zero", "zero-shot"), _styled("b-zero", "zero-shot"), _styled("c-few", "few-shot")]
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+
+    # zero-shot cases score raw 0.6 (→ 3.0); few-shot scores raw 0.8 (→ 4.0)
+    style_score = {"zero-shot": 0.6, "few-shot": 0.8}
+
+    def fake_judge(question, answer, **kw):
+        return JudgeVerdict(score=style_score[question], reasoning="ok", response="raw")
+
+    call = lambda *_a, **_k: _fake_response("ok", 1, 1)
+
+    with patch("app.runner.judge", side_effect=fake_judge):
+        outcome = execute_run(
+            dataset=_dataset(cases),
+            model_pairs=pairs,
+            system_prompt="SYS",
+            run_id=1,
+            repo=repo,
+            max_workers=1,
+            temperature=0.0,
+            do_judge=True,
+            call=call,
+        )
+
+    avgs = outcome.style_averages()
+    assert avgs[("claude-sonnet-4-6", "zero-shot")] == float(to_db_scale(0.6))  # 3.0
+    assert avgs[("claude-sonnet-4-6", "few-shot")] == float(to_db_scale(0.8))   # 4.0
+    # two zero-shot results bucketed together
+    assert len(outcome.style_scores[("claude-sonnet-4-6", "zero-shot")]) == 2
+
+
+def test_style_averages_empty_when_no_judge():
+    outcome = execute_run(
+        dataset=_dataset([_case("c1", "p")]),
+        model_pairs=[("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0"))],
+        system_prompt="SYS",
+        run_id=1,
+        repo=FakeResultsRepository({"claude-sonnet-4-6": _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")}),
+        max_workers=1,
+        temperature=0.0,
+        call=lambda *_a, **_k: _fake_response("ok", 1, 1),
+    )
+    assert outcome.style_averages() == {}
+
+
+def test_execute_run_throttles_judge_calls_when_interval_set():
+    """With judge_min_interval > 0, the runner sleeps between judge calls to
+    respect the provider rate limit. time.sleep is mocked so the test is instant."""
+    from app.judge import JudgeVerdict
+
+    pairs = [("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0"))]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+    cases = [_case("c1", "p"), _case("c2", "p"), _case("c3", "p")]
+    fake_verdict = JudgeVerdict(score=0.6, reasoning="ok", response="raw")
+
+    with patch("app.runner.judge", return_value=fake_verdict), \
+         patch("app.runner.time.sleep") as mock_sleep:
+        execute_run(
+            dataset=_dataset(cases),
+            model_pairs=pairs,
+            system_prompt="SYS",
+            run_id=1,
+            repo=repo,
+            max_workers=1,
+            temperature=0.0,
+            do_judge=True,
+            judge_min_interval=13,
+            call=lambda *_a, **_k: _fake_response("ok", 1, 1),
+        )
+
+    # First judge call isn't throttled (no prior call); the next two are.
+    assert mock_sleep.call_count >= 2
+
+
+def test_execute_run_no_throttle_when_interval_zero():
+    from app.judge import JudgeVerdict
+
+    pairs = [("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0"))]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+    fake_verdict = JudgeVerdict(score=0.6, reasoning="ok", response="raw")
+
+    with patch("app.runner.judge", return_value=fake_verdict), \
+         patch("app.runner.time.sleep") as mock_sleep:
+        execute_run(
+            dataset=_dataset([_case("c1", "p"), _case("c2", "p")]),
+            model_pairs=pairs,
+            system_prompt="SYS",
+            run_id=1,
+            repo=repo,
+            max_workers=1,
+            temperature=0.0,
+            do_judge=True,  # interval defaults to 0.0 → no throttle
+            call=lambda *_a, **_k: _fake_response("ok", 1, 1),
+        )
+
+    mock_sleep.assert_not_called()
+
+
 def test_execute_run_does_not_judge_when_flag_off():
     pairs = [
         ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
@@ -624,5 +736,6 @@ def test_main_happy_path_persists_results_to_db(tmp_path):
     mock_connect.assert_called_once()
     assert len(fake_results_repo.inserts) == 1
     assert fake_results_repo.inserts[0].case_id == "a"
+    assert fake_results_repo.inserts[0].question == "hi"
     assert fake_results_repo.inserts[0].response == "hello back"
     assert fake_results_repo.finalized  # run was finalized

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass,field
 from decimal import Decimal
 from typing import Callable, Any
@@ -21,6 +22,21 @@ from app.prompts.loader import load_prompt
 
 class JudgeParseError(ValueError):
     """Raised when the judge score is not valid, in-range verdict JSON"""
+
+
+# Transient API failures worth retrying: rate limit (429) and server
+# overload (503). Detected by status code if present, else by message
+# markers — provider-agnostic, no hard dependency on the SDK's error types.
+_RETRYABLE_STATUS = (429, 503)
+_RETRYABLE_MARKERS = ("429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE")
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """True for transient API errors (HTTP 429/503) worth retrying."""
+    if getattr(exc, "code", None) in _RETRYABLE_STATUS:
+        return True
+    msg = str(exc)
+    return any(marker in msg for marker in _RETRYABLE_MARKERS)
 
 @dataclass(frozen=True)
 class JudgeVerdict:
@@ -75,14 +91,34 @@ def judge(
         answer: str,
         *,
         rubric:str | None = None,
-        model:str = "gemini-2.5-flash",
+        model:str = "gemini-2.5-pro",  # Pro = higher-quality, more consistent judging
         max_tokens:int = 4096,
-        call: Callable[..., LLMResponse] = call_llm
+        max_retries: int = 3,
+        backoff_base: float = 2.0,
+        call: Callable[..., LLMResponse] = call_llm,
+        sleep: Callable[[float], None] = time.sleep,
 )->JudgeVerdict:
+    """Judge one answer, returning the raw 0..1 verdict.
+
+    Transient API failures (429 rate limit, 503 overload) are retried with
+    exponential backoff (backoff_base ** attempt seconds) up to `max_retries`
+    times — so an unattended run survives blips. Non-transient errors and a
+    malformed verdict propagate immediately (retrying wouldn't help). `sleep`
+    is injectable so tests don't actually wait.
+    """
     rubric = rubric or load_rubric()
     prompt = build_judge_prompt(rubric, question, answer)
-    response = call("gemini",model,prompt,max_tokens=max_tokens)
-    return parse_verdict(response.content)
+    attempt = 0
+    while True:
+        try:
+            response = call("gemini", model, prompt, max_tokens=max_tokens)
+        except Exception as e:
+            attempt += 1
+            if attempt > max_retries or not _is_retryable(e):
+                raise
+            sleep(backoff_base ** attempt)
+            continue
+        return parse_verdict(response.content)
 
 
 

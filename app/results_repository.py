@@ -42,6 +42,7 @@ class ResultsRepository(Protocol):
         run_id: int,
         model_id: int,
         case_id: str,
+        question: Optional[str] = None,
         response: str,
         latency_ms: int,
         input_tokens: int,
@@ -106,6 +107,7 @@ class PostgresResultsRepository:
         run_id: int,
         model_id: int,
         case_id: str,
+        question: Optional[str] = None,
         response: str,
         latency_ms: int,
         input_tokens: int,
@@ -117,16 +119,17 @@ class PostgresResultsRepository:
             cur.execute(
                 """
                 INSERT INTO results
-                    (run_id, model_id, case_id, response,
+                    (run_id, model_id, case_id, question, response,
                      latency_ms, input_tokens, output_tokens, cost,
                      prompt_style)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
                     run_id,
                     model_id,
                     case_id,
+                    question,
                     response,
                     latency_ms,
                     input_tokens,
