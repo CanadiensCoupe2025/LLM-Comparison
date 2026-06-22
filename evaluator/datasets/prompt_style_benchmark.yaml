@@ -1,0 +1,221 @@
+# ─────────────────────────────────────────────────────────────
+# LLMeter — Prompt-style benchmark (SCRUM-37)
+# ─────────────────────────────────────────────────────────────
+# Measures which prompt STYLE maximizes each model's quality.
+# Each `group` is ONE base task rendered in ≥2 contrasting styles;
+# only the framing varies, so any score delta is attributable to
+# the style. Scored by the LLM judge (run with --judge).
+#
+# Task content here is ORIGINAL and license-clear. It is modeled on
+# the CATEGORY of each canonical eval dataset (GSM8K, SQuAD 2.0,
+# HumanEval, BIG-Bench Hard) but is NOT verbatim from them — see
+# docs/prompt_styles_sourced.md. For a rigorous benchmark using the
+# exact upstream items, build it with a loader script that pulls
+# verbatim items by reference (the doc's recommended pattern).
+#
+# Styles compared (docs/prompt_styles_sourced.md):
+#   zero-shot · few-shot · instructional · contextual · role-based
+#
+# regression_v2.yaml stays untouched — this is a separate benchmark,
+# not a non-regression suite (SCRUM-37 DoD).
+# ─────────────────────────────────────────────────────────────
+
+dataset:
+  name: prompt_style_benchmark
+  version: 1
+  description: >
+    Per-model prompt-style benchmark (SCRUM-37). Groups of cases share a base
+    task expressed in contrasting styles (zero-shot, few-shot, instructional,
+    contextual, role-based). Task content is original, modeled on canonical
+    eval categories (reasoning/GSM8K, extraction/SQuAD 2.0, code/HumanEval).
+    Reference: docs/prompt_styles_sourced.md.
+  styles:
+    - zero-shot
+    - few-shot
+    - instructional
+    - contextual
+    - role-based
+  source_licenses:
+    gsm8k: MIT (analog — content original)
+    squad_v2: CC BY-SA 4.0 (analog — content original)
+    humaneval: MIT (analog — content original)
+    big_bench_hard: Apache-2.0 (analog — content original)
+
+cases:
+  # ===========================================================
+  # Group A — reasoning (math word problem). Analog: GSM8K (MIT).
+  # Three styles of the SAME task: zero-shot vs few-shot vs instructional.
+  # Correct answer: 8×6 = 48; 48 − 37 = 11.
+  # ===========================================================
+  - id: math-muffins-zeroshot
+    group: math-muffins
+    style: zero-shot
+    category: reasoning
+    source_dataset: gsm8k-style (original)
+    prompt: >-
+      A bakery bakes 8 boxes of muffins with 6 muffins in each box, then sells
+      37 muffins. How many muffins are left?
+    expected:
+      check: contains
+      value: ["11"]
+    rationale: Zero-shot baseline — task only, no scaffolding.
+
+  - id: math-muffins-fewshot
+    group: math-muffins
+    style: few-shot
+    category: reasoning
+    source_dataset: gsm8k-style (original)
+    prompt: |
+      Q: A box holds 4 pencils. There are 5 boxes and 3 pencils are taken out. How many pencils remain?
+      A: 5 boxes × 4 pencils = 20 pencils. 20 − 3 = 17. The answer is 17.
+
+      Q: A tray has 7 rows of 3 cups. 4 cups are removed. How many cups remain?
+      A: 7 × 3 = 21 cups. 21 − 4 = 17. The answer is 17.
+
+      Q: A bakery bakes 8 boxes of muffins with 6 muffins in each box, then sells 37 muffins. How many muffins are left?
+      A:
+    expected:
+      check: contains
+      value: ["11"]
+    rationale: >-
+      Few-shot chain-of-thought exemplars demonstrate the multi-step format.
+      The few-shot vs zero-shot delta per model is the headline number.
+
+  - id: math-muffins-instructional
+    group: math-muffins
+    style: instructional
+    category: reasoning
+    source_dataset: gsm8k-style (original)
+    prompt: |
+      Solve the problem step by step. First compute the total number of muffins,
+      then subtract the number sold, then state the final number on its own line.
+
+      A bakery bakes 8 boxes of muffins with 6 muffins in each box, then sells
+      37 muffins. How many muffins are left?
+    expected:
+      check: contains
+      value: ["11"]
+    rationale: Explicit procedure — tests instruction-following vs shortcutting.
+
+  # ===========================================================
+  # Group B — extraction / reading comprehension. Analog: SQuAD 2.0 (CC BY-SA 4.0).
+  # Same passage; contextual (grounded) vs zero-shot (bare) framing, plus an
+  # unanswerable abstention trap. Passage is original/fictional.
+  # ===========================================================
+  - id: extract-marrow-contextual
+    group: extract-marrow
+    style: contextual
+    category: extraction
+    source_dataset: squad2-style (original passage)
+    prompt: |
+      Read the passage below and answer the question using only information it
+      contains. If the passage does not contain the answer, reply exactly:
+      "Not in the passage."
+
+      Passage:
+      The Marrow Library opened in 1908 in the town of Aldercross. Its reading
+      room holds 240 seats, and its collection passed one million volumes in
+      1994. The library is funded entirely by a private endowment established
+      by the Marrow family.
+
+      Question: In what year did the collection pass one million volumes?
+      Answer:
+    expected:
+      check: contains
+      value: ["1994"]
+    rationale: Contextual framing — answer must be grounded in the supplied passage.
+
+  - id: extract-marrow-zeroshot
+    group: extract-marrow
+    style: zero-shot
+    category: extraction
+    source_dataset: squad2-style (original passage)
+    prompt: |
+      The Marrow Library opened in 1908 in the town of Aldercross. Its reading
+      room holds 240 seats, and its collection passed one million volumes in
+      1994. The library is funded entirely by a private endowment established
+      by the Marrow family.
+
+      In what year did the collection pass one million volumes?
+    expected:
+      check: contains
+      value: ["1994"]
+    rationale: >-
+      Same passage + question, but no grounding instruction. Contrast vs the
+      contextual variant isolates the effect of the framing alone.
+
+  - id: extract-marrow-unanswerable-contextual
+    group: extract-marrow
+    style: contextual
+    category: extraction
+    source_dataset: squad2-style (original passage)
+    prompt: |
+      Read the passage below and answer the question using only information it
+      contains. If the passage does not contain the answer, reply exactly:
+      "Not in the passage."
+
+      Passage:
+      The Marrow Library opened in 1908 in the town of Aldercross. Its reading
+      room holds 240 seats, and its collection passed one million volumes in
+      1994. The library is funded entirely by a private endowment established
+      by the Marrow family.
+
+      Question: Who is the current head librarian of the Marrow Library?
+      Answer:
+    expected:
+      check: contains
+      value: ["Not in the passage"]
+    rationale: >-
+      Abstention trap — the answer is absent. A context-faithful model abstains;
+      one leaning on parametric knowledge hallucinates a name.
+
+  # ===========================================================
+  # Group C — code generation. Analog: HumanEval (MIT).
+  # Identical spec; zero-shot vs role-based (expert persona) framing.
+  # ===========================================================
+  - id: code-secondlargest-zeroshot
+    group: code-secondlargest
+    style: zero-shot
+    category: code
+    source_dataset: humaneval-style (original spec)
+    prompt: |
+      Complete the following Python function. Return only the completed function.
+
+      def second_largest(nums):
+          """Return the second-largest DISTINCT integer in nums, or None if it
+          does not exist.
+          >>> second_largest([4, 1, 7, 7, 3])
+          4
+          >>> second_largest([5, 5])
+          None
+          """
+    expected:
+      check: contains
+      value: ["def second_largest"]
+    rationale: Zero-shot code-gen baseline — spec only, no persona.
+
+  - id: code-secondlargest-rolebased
+    group: code-secondlargest
+    style: role-based
+    category: code
+    source_dataset: humaneval-style (original spec)
+    prompt: |
+      You are a principal software engineer who writes production-grade Python
+      and cares about correctness on edge cases above all else. Complete the
+      following function so it passes a rigorous test suite. Return only the
+      completed function.
+
+      def second_largest(nums):
+          """Return the second-largest DISTINCT integer in nums, or None if it
+          does not exist.
+          >>> second_largest([4, 1, 7, 7, 3])
+          4
+          >>> second_largest([5, 5])
+          None
+          """
+    expected:
+      check: contains
+      value: ["def second_largest"]
+    rationale: >-
+      Identical spec wrapped in an expert persona — any quality movement vs the
+      zero-shot variant is attributable purely to the role framing.

@@ -43,6 +43,7 @@ class _InsertedRow:
     input_tokens: int
     output_tokens: int
     cost: Decimal
+    prompt_style: str | None = None
 
 
 class FakeResultsRepository:
@@ -391,6 +392,54 @@ def test_execute_run_survives_judge_api_error():
 
     assert outcome.inserted == 1        # run completed, response kept
     assert repo.judge_updates == []     # no score written
+
+
+def test_execute_run_persists_prompt_style_from_case():
+    """SCRUM-37: the runner reads `style` off each case (Case.raw) and
+    persists it on the result row so quality can be aggregated by style."""
+    styled_case = Case(
+        id="math-muffins-fewshot",
+        prompt="Q: ...\nA:",
+        raw={"id": "math-muffins-fewshot", "prompt": "Q: ...\nA:", "style": "few-shot"},
+    )
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+
+    execute_run(
+        dataset=_dataset([styled_case]),
+        model_pairs=pairs,
+        system_prompt="SYS",
+        run_id=1,
+        repo=repo,
+        max_workers=1,
+        temperature=0.0,
+        call=lambda *_a, **_k: _fake_response("ok", 1, 1),
+    )
+
+    assert repo.inserts[0].prompt_style == "few-shot"
+
+
+def test_execute_run_prompt_style_none_for_unstyled_case():
+    """A plain case (no `style` key) persists prompt_style = None."""
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+
+    execute_run(
+        dataset=_dataset([_case("c1", "plain prompt")]),
+        model_pairs=pairs,
+        system_prompt="SYS",
+        run_id=1,
+        repo=repo,
+        max_workers=1,
+        temperature=0.0,
+        call=lambda *_a, **_k: _fake_response("ok", 1, 1),
+    )
+
+    assert repo.inserts[0].prompt_style is None
 
 
 def test_execute_run_does_not_judge_when_flag_off():

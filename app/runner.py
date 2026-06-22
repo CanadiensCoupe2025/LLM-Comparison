@@ -60,6 +60,7 @@ class TaskResult:
     question: str
     model_row: ModelRow
     response: LLMResponse
+    prompt_style: Optional[str] = None
 
 
 @dataclass
@@ -162,7 +163,13 @@ def execute_run(
         provider = MODEL_REGISTRY[model_key].provider
         prompt = build_prompt(system_prompt, case.prompt)
         response = call(provider, model_key, prompt, temperature=temperature)
-        return TaskResult(case_id=case.id,question=case.prompt, model_row=model_row, response=response)
+        return TaskResult(
+            case_id=case.id,
+            question=case.prompt,
+            model_row=model_row,
+            response=response,
+            prompt_style=case.raw.get("style"),
+        )
 
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
@@ -199,6 +206,7 @@ def execute_run(
                     input_tokens=result.response.tokens_in,
                     output_tokens=result.response.tokens_out,
                     cost=cost,
+                    prompt_style=result.prompt_style,
                 )
                 if do_judge:
                     # Judging is best-effort: a judge failure (bad verdict,
