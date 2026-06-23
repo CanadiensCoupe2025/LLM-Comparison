@@ -94,18 +94,32 @@ def _require_env(var: str) -> str:
     return value
 
 
+# Output-token budget shared by every adapter. Kept deliberately high because on
+# reasoning models (OpenAI Responses, e.g. gpt-5/o3) this budget is split between
+# reasoning AND the visible answer — too low and reasoning eats it all, leaving an
+# EMPTY response that the judge then scores ~0. Non-reasoning models stop at their
+# natural completion well under this cap, so a high ceiling costs them nothing.
+DEFAULT_MAX_TOKENS = 8192
+
+
 class AnthropicAdapter:
     def call(
         self,
         spec: ModelSpec,
         prompt: str,
         *,
-        max_tokens: int = 1024,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
         temperature: float = 0.0,
     ) -> LLMResponse:
         import anthropic
 
-        client = anthropic.Anthropic(api_key=_require_env("ANTHROPIC_API_KEY"))
+        # max_retries above the SDK default (2): the Sonnet pool sheds load with
+        # HTTP 529 (overloaded_error) during spikes, and 2 retries weren't enough
+        # to ride them out — runs lost cases. The SDK retries 529 with exponential
+        # backoff for us, so a higher budget just absorbs longer overload windows.
+        client = anthropic.Anthropic(
+            api_key=_require_env("ANTHROPIC_API_KEY"), max_retries=8
+        )
         kwargs: dict[str, Any] = {
             "model": spec.api_id,
             "max_tokens": max_tokens,
@@ -138,7 +152,7 @@ class GeminiAdapter:
             spec: ModelSpec,
             prompt: str,
             *,
-            max_tokens: int = 4096,
+            max_tokens: int = DEFAULT_MAX_TOKENS,
             temperature: float = 0.0,
     ) -> LLMResponse:
         from google import genai
@@ -174,7 +188,7 @@ class OpenAIAdapter:
         spec: ModelSpec,
         prompt: str,
         *,
-        max_tokens: int = 1024,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
         temperature: float = 0.0,
     ) -> LLMResponse:
         import openai
@@ -262,7 +276,7 @@ class DeepSeekAdapter:
         spec: ModelSpec,
         prompt: str,
         *,
-        max_tokens: int = 1024,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
         temperature: float = 0.0,
     ) -> LLMResponse:
         import openai

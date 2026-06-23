@@ -45,6 +45,12 @@ class _InsertedRow:
     cost: Decimal
     question: str | None = None
     prompt_style: str | None = None
+    sample_idx: int = 0
+    resp_style_headers: int | None = None
+    resp_style_bold: int | None = None
+    resp_style_ordered: int | None = None
+    resp_style_unordered: int | None = None
+    resp_style_code_blocks: int | None = None
 
 
 class FakeResultsRepository:
@@ -190,6 +196,125 @@ def test_execute_run_inserts_one_row_per_case_model_pair():
     assert (outcome.inserted, outcome.failed) == (4, 0)
     keys = {(r.case_id, r.model_id) for r in repo.inserts}
     assert keys == {("c1", 1), ("c1", 2), ("c2", 1), ("c2", 2)}
+
+
+def test_execute_run_inserts_n_rows_per_pair_with_distinct_sample_idx():
+    """--samples N evaluates each (case, model) pair N times, persisting one
+    row per draw, each tagged with a sample_idx in 0..N-1."""
+    cases = [_case("c1", "prompt one")]
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+    fake_call = lambda *_a, **_k: _fake_response("ok", 10, 5)
+
+    outcome = execute_run(
+        dataset=_dataset(cases),
+        model_pairs=pairs,
+        system_prompt="SYS",
+        run_id=999,
+        repo=repo,
+        max_workers=1,
+        temperature=0.7,
+        samples=3,
+        call=fake_call,
+    )
+
+    assert outcome.inserted == 3
+    rows = [r for r in repo.inserts if (r.case_id, r.model_id) == ("c1", 1)]
+    assert len(rows) == 3
+    assert sorted(r.sample_idx for r in rows) == [0, 1, 2]
+
+
+def test_execute_run_extracts_and_persists_response_style_features():
+    """Each inserted row carries the markdown/style feature counts of its
+    response, extracted regardless of whether judging is enabled."""
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+    styled = "# Title\n\nHere is **bold** text.\n\n1. one\n2. two\n- bullet\n"
+    call = lambda *_a, **_k: _fake_response(styled, 5, 3)
+
+    execute_run(
+        dataset=_dataset([_case("c1", "hi")]),
+        model_pairs=pairs,
+        system_prompt="SYS",
+        run_id=1,
+        repo=repo,
+        max_workers=1,
+        temperature=0.0,
+        call=call,
+    )
+
+    row = repo.inserts[0]
+    assert row.resp_style_headers == 1
+    assert row.resp_style_bold == 1
+    assert row.resp_style_ordered == 2
+    assert row.resp_style_unordered == 1
+    assert row.resp_style_code_blocks == 0
+
+
+def test_execute_run_defaults_to_single_sample():
+    """Omitting samples reproduces single-shot behaviour: one row, sample_idx 0."""
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+    fake_call = lambda *_a, **_k: _fake_response("ok", 10, 5)
+
+    outcome = execute_run(
+        dataset=_dataset([_case("c1", "hi")]),
+        model_pairs=pairs,
+        system_prompt="SYS",
+        run_id=1,
+        repo=repo,
+        max_workers=1,
+        temperature=0.0,
+        call=fake_call,
+    )
+
+    assert outcome.inserted == 1
+    assert repo.inserts[0].sample_idx == 0
+
+
+def test_execute_run_judges_every_sample_and_reports_mean_stddev():
+    """Each sample is judged independently, so N samples → N judge calls per
+    pair, and RunOutcome exposes per-model mean ± stddev over those scores."""
+    from app.judge import JudgeVerdict
+
+    pairs = [
+        ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0")),
+    ]
+    repo = FakeResultsRepository({k: v for k, v in pairs})
+    call = lambda *_a, **_k: _fake_response("Canberra.", 5, 3)
+
+    # Three distinct raw scores → scaled ×5 to 1.0, 3.0, 5.0 (mean 3.0).
+    verdicts = iter([
+        JudgeVerdict(score=0.2, reasoning="r", response="raw"),
+        JudgeVerdict(score=0.6, reasoning="r", response="raw"),
+        JudgeVerdict(score=1.0, reasoning="r", response="raw"),
+    ])
+    with patch("app.runner.judge", side_effect=lambda *_a, **_k: next(verdicts)) as mock_judge:
+        outcome = execute_run(
+            dataset=_dataset([_case("c1", "Quelle est la capitale ?")]),
+            model_pairs=pairs,
+            system_prompt="SYS",
+            run_id=1,
+            repo=repo,
+            max_workers=1,  # serialize so the verdict iter is deterministic
+            temperature=0.7,
+            samples=3,
+            do_judge=True,
+            call=call,
+        )
+
+    assert outcome.inserted == 3
+    assert mock_judge.call_count == 3  # one judge call per sample
+    mean, stddev, n = outcome.model_score_stats()["claude-sonnet-4-6"]
+    assert n == 3
+    assert mean == pytest.approx(3.0)      # (1.0 + 3.0 + 5.0) / 3
+    assert stddev == pytest.approx(2.0)    # sample stddev of {1, 3, 5}
 
 
 def test_execute_run_computes_cost_from_tokens_and_prices():
@@ -685,11 +810,23 @@ def test_parse_args_accepts_temperature_and_max_workers():
             "--models", "claude-sonnet-4-6", "gpt-5",
             "--max-workers", "12",
             "--temperature", "0.7",
+            "--samples", "5",
         ]
     )
     assert args.max_workers == 12
     assert args.temperature == 0.7
+    assert args.samples == 5
     assert args.models == ["claude-sonnet-4-6", "gpt-5"]
+
+
+def test_parse_args_samples_defaults_to_high():
+    """--samples defaults to DEFAULT_SAMPLES (high) so runs carry a spread
+    out of the box; omitting it must not silently fall back to single-shot."""
+    from app.runner import _parse_args, DEFAULT_SAMPLES
+
+    args = _parse_args(["--dataset", "x.yaml", "--models", "claude-sonnet-4-6"])
+    assert args.samples == DEFAULT_SAMPLES
+    assert DEFAULT_SAMPLES > 1
 
 
 def test_main_happy_path_persists_results_to_db(tmp_path):
@@ -730,7 +867,11 @@ def test_main_happy_path_persists_results_to_db(tmp_path):
          patch("app.runner.PostgresResultsRepository", return_value=fake_results_repo), \
          patch("app.runner.PostgresPromptRepository", return_value=fake_prompt_repo):
         mock_anthropic_cls.return_value.messages.create.return_value = fake_anthropic_response
-        exit_code = main(["--dataset", str(ds), "--models", "claude-sonnet-4-6"])
+        # --samples 1: this smoke test asserts a single persisted row, so pin
+        # single-shot rather than ride the high default.
+        exit_code = main(
+            ["--dataset", str(ds), "--models", "claude-sonnet-4-6", "--samples", "1"]
+        )
 
     assert exit_code == 0
     mock_connect.assert_called_once()

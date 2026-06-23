@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import os
+import statistics
 import sys
 import time
 from dataclasses import dataclass, field
@@ -31,6 +32,7 @@ import psycopg
 from app.judge import judge, to_db_scale
 from app.datasets import Case, Dataset, DatasetError, load_dataset
 from app.llm_client import MODEL_REGISTRY, LLMResponse, call_llm
+from app.style_features import StyleFeatures, extract_style_features
 from app.prompts.repository import PostgresPromptRepository, PromptRepository
 from app.results_repository import (
     ModelNotFoundError,
@@ -42,6 +44,9 @@ from app.results_repository import (
 
 SYSTEM_PROMPT_NAME = "eval_system"
 DEFAULT_MAX_WORKERS = 6
+# High by default: tokens are budgeted and a single draw is a noisy point
+# estimate. N=1 reproduces the old single-shot behaviour for quick smoke runs.
+DEFAULT_SAMPLES = 10
 EXIT_OK = 0
 EXIT_CONFIG = 1
 EXIT_PARTIAL_FAILURE = 3
@@ -62,6 +67,8 @@ class TaskResult:
     model_row: ModelRow
     response: LLMResponse
     prompt_style: Optional[str] = None
+    sample_idx: int = 0
+    style: Optional[StyleFeatures] = None
 
 
 @dataclass
@@ -83,6 +90,25 @@ class RunOutcome:
     # SCRUM-37: scaled (0–5) judge scores bucketed by (model_key, prompt_style),
     # populated only on judged benchmark runs. Empty otherwise.
     style_scores: dict[tuple[str, str], list[Decimal]] = field(default_factory=dict)
+    # Repeated sampling: every scaled judge score per model_key, so the run
+    # summary can report mean ± spread. Populated only on judged runs.
+    model_scores: dict[str, list[Decimal]] = field(default_factory=dict)
+
+    def model_score_stats(self) -> dict[str, tuple[float, float, int]]:
+        """Per-model (mean, sample stddev, n) of judge scores (0–5).
+
+        stddev is 0.0 when a model has fewer than 2 samples — one point has
+        no spread. Skips models with no judged samples.
+        """
+        out: dict[str, tuple[float, float, int]] = {}
+        for model_key, scores in self.model_scores.items():
+            if not scores:
+                continue
+            floats = [float(s) for s in scores]
+            mean = sum(floats) / len(floats)
+            stddev = statistics.stdev(floats) if len(floats) > 1 else 0.0
+            out[model_key] = (mean, stddev, len(floats))
+        return out
 
     def style_averages(self) -> dict[tuple[str, str], float]:
         """Mean judge score per (model, style). Skips empty buckets."""
@@ -155,14 +181,17 @@ def execute_run(
     repo: ResultsRepository,
     max_workers: int,
     temperature: float,
+    samples: int = 1,
     do_judge: bool = False,
     judge_min_interval: float = 0.0,
     call: Callable[..., LLMResponse] = call_llm,
 ) -> RunOutcome:
     """Fan out every (case, model) call, persist each result as it returns.
 
-    Returns a `RunOutcome` with insert/failure counts and in-memory
-    metrics aggregates (total cost, tokens, latencies). Always calls
+    Each (case, model) pair is evaluated `samples` times (default 1); every
+    draw is persisted as its own `results` row, tagged with `sample_idx`.
+    Returns a `RunOutcome` with insert/failure counts and in-memory metrics
+    aggregates (total cost, tokens, latencies). Always calls
     `repo.finalize_run` before returning, even if every task raises.
     """
     inserted = 0
@@ -172,10 +201,13 @@ def execute_run(
     total_output_tokens = 0
     latencies_ms: list[int] = []
     style_scores: dict[tuple[str, str], list[Decimal]] = {}
+    model_scores: dict[str, list[Decimal]] = {}
     # Rate-limit throttle: timestamp of the last judge call (monotonic clock).
     last_judge_at: Optional[float] = None
 
-    def task(case: Case, model_key: str, model_row: ModelRow) -> TaskResult:
+    def task(
+        case: Case, model_key: str, model_row: ModelRow, sample_idx: int
+    ) -> TaskResult:
         provider = MODEL_REGISTRY[model_key].provider
         prompt = build_prompt(system_prompt, case.prompt)
         response = call(provider, model_key, prompt, temperature=temperature)
@@ -185,6 +217,9 @@ def execute_run(
             model_row=model_row,
             response=response,
             prompt_style=case.raw.get("style"),
+            sample_idx=sample_idx,
+            # Cheap, pure — compute on the worker thread alongside the response.
+            style=extract_style_features(response.content),
         )
 
     try:
@@ -192,8 +227,9 @@ def execute_run(
             futures: dict[concurrent.futures.Future, tuple[str, str]] = {}
             for case in dataset.cases:
                 for model_key, model_row in model_pairs:
-                    fut = ex.submit(task, case, model_key, model_row)
-                    futures[fut] = (case.id, model_key)
+                    for sample_idx in range(samples):
+                        fut = ex.submit(task, case, model_key, model_row, sample_idx)
+                        futures[fut] = (case.id, model_key)
 
             for fut in concurrent.futures.as_completed(futures):
                 case_id, model_key = futures[fut]
@@ -224,11 +260,20 @@ def execute_run(
                     output_tokens=result.response.tokens_out,
                     cost=cost,
                     prompt_style=result.prompt_style,
+                    sample_idx=result.sample_idx,
+                    resp_style_headers=result.style.headers if result.style else None,
+                    resp_style_bold=result.style.bold if result.style else None,
+                    resp_style_ordered=result.style.ordered if result.style else None,
+                    resp_style_unordered=result.style.unordered if result.style else None,
+                    resp_style_code_blocks=(
+                        result.style.code_blocks if result.style else None
+                    ),
                 )
                 if do_judge:
-                    # Throttle judge calls to respect the provider's rate limit
-                    # (e.g. Gemini free tier = 5/min → set interval ~13s). The
-                    # run is slower but completes without 429 failures.
+                    # Optional pacing between judge calls. Off by default —
+                    # judge() already retries 429/503 with exponential backoff,
+                    # so this is only needed to cap burst RPM when judging is
+                    # parallelized at high --samples.
                     if judge_min_interval > 0 and last_judge_at is not None:
                         wait = judge_min_interval - (time.monotonic() - last_judge_at)
                         if wait > 0:
@@ -244,6 +289,7 @@ def execute_run(
                             judge_score=scaled,
                             judge_reasoning=verdict.reasoning,
                         )
+                        model_scores.setdefault(model_key, []).append(scaled)
                         if result.prompt_style:
                             style_scores.setdefault(
                                 (model_key, result.prompt_style), []
@@ -276,6 +322,7 @@ def execute_run(
         total_output_tokens=total_output_tokens,
         latencies_ms=latencies_ms,
         style_scores=style_scores,
+        model_scores=model_scores,
     )
 
 
@@ -330,7 +377,18 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         "--temperature",
         type=float,
         default=0.0,
-        help="Sampling temperature (ignored by reasoning models).",
+        help="Sampling temperature (ignored by reasoning models). Use > 0 "
+        "(e.g. 0.7) with --samples to get real run-to-run variance.",
+    )
+    parser.add_argument(
+        "--samples",
+        type=int,
+        default=DEFAULT_SAMPLES,
+        metavar="N",
+        help=f"Evaluate each (case, model) pair N times so scores carry a "
+        f"mean ± spread instead of one noisy draw (default: {DEFAULT_SAMPLES}). "
+        f"N=1 reproduces single-shot behaviour. Needs --temperature > 0 to "
+        f"show variance for non-reasoning models.",
     )
     parser.add_argument(
         "--judge",
@@ -343,7 +401,8 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         default=0.0,
         metavar="SECONDS",
         help="Minimum seconds between judge calls (rate-limit throttle). "
-        "0 = no throttle. Gemini free tier (5/min) → use ~13.",
+        "0 = off (default); judge() already retries 429s with backoff. Raise "
+        "only to cap burst RPM when judging is parallelized at high --samples.",
     )
     return parser.parse_args(argv)
 
@@ -366,6 +425,21 @@ def _print_style_summary(outcome: RunOutcome) -> None:
             for style, avg in by_model[model_key]
         )
         print(f"  {model_key}: {parts}")
+
+
+def _print_variance_summary(outcome: RunOutcome) -> None:
+    """Print per-model mean ± stddev of judge scores across all samples.
+
+    No-op on unjudged runs (no scores collected). With --samples 1 the stddev
+    is 0 — the point of high --samples is to make this spread meaningful.
+    """
+    stats = outcome.model_score_stats()
+    if not stats:
+        return
+    print("\nJudge score mean ± stddev by model (0–5):")
+    for model_key in sorted(stats):
+        mean, stddev, n = stats[model_key]
+        print(f"  {model_key}: {mean:.2f} ± {stddev:.2f} (n={n})")
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -403,7 +477,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         run_id = results_repo.create_run(prompt_id, args.dataset.name)
         print(
             f"Run id={run_id}  dataset={dataset.name} v{dataset.version}  "
-            f"cases={len(dataset.cases)}  models={len(model_pairs)}"
+            f"cases={len(dataset.cases)}  models={len(model_pairs)}  "
+            f"samples={args.samples}"
         )
 
         outcome = execute_run(
@@ -414,11 +489,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             repo=results_repo,
             max_workers=args.max_workers,
             temperature=args.temperature,
+            samples=args.samples,
             do_judge=args.judge,
             judge_min_interval=args.judge_min_interval,
         )
 
-        total = len(dataset.cases) * len(model_pairs)
+        total = len(dataset.cases) * len(model_pairs) * args.samples
         print(f"\n{outcome.inserted}/{total} results inserted, {outcome.failed} failed.")
         if outcome.inserted:
             print(
@@ -427,7 +503,12 @@ def main(argv: Optional[list[str]] = None) -> int:
                 f"latency min/avg/max={outcome.min_latency_ms}/"
                 f"{outcome.avg_latency_ms:.0f}/{outcome.max_latency_ms} ms"
             )
+        _print_variance_summary(outcome)
         _print_style_summary(outcome)
         return EXIT_PARTIAL_FAILURE if outcome.failed else EXIT_OK
     finally:
         conn.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
