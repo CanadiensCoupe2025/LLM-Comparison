@@ -1,0 +1,1256 @@
+# ─────────────────────────────────────────────────────────────
+# arena_hard_v2_subset.yaml  ·  GENERATED — do not edit by hand
+#   regenerate: python scripts/import_arena_hard.py --source <question.jsonl>
+# ─────────────────────────────────────────────────────────────
+# Prompts imported VERBATIM from arena-hard-auto (Apache-2.0).
+#   source : https://github.com/lmarena/arena-hard-auto
+#   file   : data/arena-hard-v2.0/question.jsonl
+#   ref    : 196f6b826783b3da7310e361a805fa36f0be83f3
+# Each case `id` is the upstream `uid` for traceability. See
+# licenses/arena-hard-NOTICE for attribution.
+# ─────────────────────────────────────────────────────────────
+dataset:
+  name: arena_hard_v2_subset
+  version: 1
+  description: Curated balanced subset of arena-hard-auto v2.0 hard prompts (coding / math / creative_writing).
+    Open-ended; run with --judge.
+cases:
+- id: 0253f09025cc40cd
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    A banking company is successfully operating its public mobile banking stack on AWS. The mobile banking stack is deployed in a VPC that includes private subnets and public subnets. The company is using IPv4 networking and has not deployed or supported IPv6 in the environment. The company has decided to adopt a third-party service provider's API and must integrate the API with the existing environment. The service provider’s API requires the use of IPv6.
+    A network engineer must turn on IPv6 connectivity for the existing workload that is deployed in a private subnet. The company does not want to permit IPv6 traffic from the public internet and mandates that the company's servers must initiate all IPv6 connectivity. The network engineer turns on IPv6 in the VPC and in the private subnets.
+    Which solution will meet these requirements?
+
+    A. Create an internet gateway and a NAT gateway in the VPC. Add a route to the existing subnet route tables to point IPv6 traffic to the NAT gateway.
+    B. Create an internet gateway and a NAT instance in the VPC. Add a route to the existing subnet route tables to point IPv6 traffic to the NAT instance.
+    C. Create an egress-only Internet gateway in the VPAdd a route to the existing subnet route tables to point IPv6 traffic to the egress-only internet gateway.
+    D. Create an egress-only internet gateway in the VPC. Configure a security group that denies all inbound traffic. Associate the security group with the egress-only internet gateway.
+  expected:
+    check: judge
+- id: 0275cb6eae1649c1
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    To start with, our own perceptual treatment of colorfulness involves the difference between Red and Green and the difference between Blue and Yellow:
+
+    a ~ R-G
+    b ~ B - (R + G)/2
+
+    or something like that
+
+    but the process above suggests a more symmetrical and three-dimensional notion of colorfulness that isn’t grounded in perception:
+
+    a’ ~ R - (G + B)
+    b’ ~ G - (R + B)
+    c’ ~ B - (R + G)
+
+    so my question really was more, how would you take such a more perceptually grounded version with only two dimensions and map it over these three dimensions to get the “perceptual equivalent” of what the math tells us for this infinite saturation compression limit.
+  expected:
+    check: judge
+- id: 03ac130e6ed44aaa
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Create a responsive instagram login page in flutter also including imges and dark theme
+  expected:
+    check: judge
+- id: 045a786b4e5d4ec6
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    uint8_t select_action(uint8_t state) {
+        int i;
+        if((float)rand() / RAND_MAX < EPSILON) {
+            return rand() % ACTION_SIZE;
+        } else {
+            // Ñ¡Ôñ×î¼Ñ¶¯×÷
+            uint8_t best_action = 0;
+            float max_q = Q[state][0];
+            for(i = 0; i < ACTION_SIZE; i++) {
+                if(Q[state][i] >= max_q) {
+                    max_q = Q[state][i];
+                    best_action = i;
+                }
+            }
+            return best_action;
+        }
+    }
+
+    // ?????????
+    float take_action_and_get_reward(uint8_t action) {
+        float reward = 0;
+        uint8_t new_state;
+        if(action == 0)
+        {
+            Car_SpinLeft(1500, 1500);
+            delay_ms(20);
+        }
+        else if(action == 1) //ÓÒ´óÍä
+        {
+            Car_SpinRight(1500, 1500);
+            delay_ms(20);
+        }
+        else if(action == 2)
+        {
+            Car_Run(3000 / 2);
+            delay_ms(20);
+        }
+
+        new_state = get_state();
+
+        if(new_state == b1001) {
+            reward = 3;  // ?????????????
+        } else if((new_state == b1011) || (new_state == b1101)) {
+            reward = 0;  // ??????????????
+        } else {
+            reward = -1;  // ??????????????
+        }
+
+        return reward;
+    }
+
+    // ??Q?
+    void update_q_value(uint8_t state, uint8_t action, float reward, uint8_t new_state) {
+        float max_q = Q[new_state][0];
+        int i;
+        for(i = 1; i < ACTION_SIZE; i++) {
+            if(Q[new_state][i] > max_q) {
+                max_q = Q[new_state][i];
+            }
+        }
+
+        Q[state][action] += ALPHA * (reward + GAMMA * max_q - Q[state][action]);
+    }
+
+    // ?????
+    void train(void) {
+        double EPSILON  = 0.1;
+        int episode;
+        uint8_t new_state;
+        for(episode = 0; episode < 1000; episode++) {   // ????1000???
+            uint8_t state = get_state();
+            while(1) {
+                uint8_t action = select_action(state);
+                float reward = take_action_and_get_reward(action);
+                new_state = get_state();
+                update_q_value(state, action, reward, new_state);
+                state = new_state;
+                if(new_state == b1111) {
+                    Car_Stop();
+                    while(get_state() != b1001);
+                    delay_ms(1500);
+                }
+                //EPSILON *= 0.99;
+            }
+        }
+    }请你总结一下上面的代码
+  expected:
+    check: judge
+- id: 06add81598044afd
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: write me a python script to download music from yt without api
+  expected:
+    check: judge
+- id: 0775b8a6be1a4d07
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: "Ebac Prompt\n\n\nYou're a genius catalog SEO Manager making product descriptions. Here are\
+    \ your instructions:\n\n\n1st Header: A meta and SEO certified sellable header to introduce the product\
+    \ in a way that is emotional or scenario driven, with the rearrange form of the product name, making\
+    \ sure it won't be the same as the next headers. (Ex: an uplifiting scenario : product name / With\
+    \ product name have this benefit)\n\n1st Body: An emotional driven 3 short paragraph description of\
+    \ the product with meta SEO words. Add Scenarios but don't make it repetative. \n\n2nd Header: A meta\
+    \ and SEO certified problem question and with the rearrange form of the product name, making sure\
+    \ it won't be the same as the next headers. (Ex: problem question? product is here.)\n\n2nd Body:\
+    \ a short spiel on how the the product solves the problem. Then list the features/benefits of the\
+    \ product in such way that it is listed this way  Feature/benefit: details. \n\n3rd Header: A meta\
+    \ and SEO certified way of saying this product is and advantage to have this is the future and this\
+    \ is how it works. (Example: Gain somethin with product name: The future of )\n\n3rd Body: a short\
+    \ spiel on how the buyer is of advantage using this product, and using the product in different settings\
+    \ would be their advantage. Then this is how it works. List the steps as it is in the data. Then End\
+    \ it with a scenario in the future with this product with a buy now spiel. \n\n4th Body:\n\nGive me\
+    \ a list of what's in the box\nusing this format\nitem (model number) - quanitity unit\n\n5th Header:\
+    \ a Meta SEO certified header about the specifications of the product\n\n6th Header:  a Meta SEO certified\
+    \ header about the manuals of the product\n\n\nHere's your data:\n\n\nName: \n\nEBac CD200 Industrial\
+    \ Dehumidifier - 138 PPD | 664 CFM\n\n\nBody:\n\nEBAC Desiccant Dehumidifier - Precision Beyond Ordinary\n\
+    Unleash superior dehumidification with the EBAC Desiccant Dehumidifiers, a pinnacle of precision and\
+    \ efficiency. Crafted with stainless steel strength, this powerhouse boasts auto/manual mode selection,\
+    \ electronic controls, and a high-capacity PTC Heater for immediate and sustained drying.\n\nDD200\
+    \ and DD300 Key Features:\nStainless Steel Construction\nAuto / Manual Mode Selection\nElectronic\
+    \ Controls\nHigh Capacity PTC Heater\nRemote Humidistat Facility\nLow Temperature Operation\nAmmeter\n\
+    Why Choose EIPL: As Europe's leading dehumidifier manufacturer, EIPL ensures reliability in the harshest\
+    \ conditions. With over 37 years of expertise, our dehumidifiers stand the test of time, trusted by\
+    \ the plant hire trade for their ruggedness and outstanding performance.\n\nPrecision in Design: The\
+    \ DD200 & DD300's compact, rugged design, coupled with a PTC Heater, guarantees swift and consistent\
+    \ drying. Monitor efficiency with the built-in ammeter and hours run meter. The unit offers manual/auto\
+    \ control and accommodates a remote humidistat for seamless operation.\n\nHigh-Efficiency Patented\
+    \ PPS Rotor: The heart of our dehumidifiers lies in the patented PPS Rotor, with 82% active Silica\
+    \ Gel, ensuring peak performance across diverse environments. Washable and designed for longevity,\
+    \ it epitomizes our commitment to excellence.\n\nIgnite Comfort - Opt for EBAC Desiccant Dehumidifiers\
+    \ Now!\n\nHow a dehumidifier works diagram\nHow Our Dehumidifier Works:\nProcess air is drawn into\
+    \ the dehumidifier\nProcess air passes over a wheel impregnated with silica gel.\nThe silica gel absorbs\
+    \ the moisture from the air.\nProcess air leaves the dehumidifier as warm dry air.\nThe silica gel\
+    \ wheel continually rotates.\nRegeneration air is heated to a high temperature and passed over a segment\
+    \ of the wheel\nSilica gel releases the moisture from the wheel into the regeneration air.\nRegeneration\
+    \ air leaves the dehumidifier as warm wet air and exhausted outside.\nManuals of DD200 and DD300 Dehumidifiers\n\
+    Product Sheet of DD200\nProduct Sheet of DD300\nOperation Manual of DD200\nOperation Manual of DD300\n\
+    Wiring Diagram of DD200\nWiring Diagram of DD300\nWiring Schematic of DD200\nWiring Schematic of DD300\n\
+    Spare Parts List of DD200\nSpare Parts List of DD300\nWarranty\nSpecs of Desiccant Dehumidifiers\n\
+    Specification\tDD200\tDD300\nHeight (inch)\t13.3\t14.5\nWidth (inch)\t13.0\t14.2\nDepth (inch)\t15.0\t\
+    17.0\nWeight (lbs)\t37.5\t44\nVoltage\t110\t110\nPhase\t1\t1\nFrequency (Hz)\t60\t60\nPower (kW)\t\
+    0.8\t1.4\nCurrent (A)\t7.5\t12.4\nProcess Airflow (cfm)\t115\t136\nRegen Airflow (cfm)\t38\t42\nProcess\
+    \ Duct Size (inch)\t5.0\t5.0\nRegen Duct Size (inch)\t2.75\t2.75\nNoise Level (dba)\t67\t67\nTypical\
+    \ Extraction (ppd)\t36\t69\nMin Operating Temp (°F)\t-4\t-4\nMax Operating Temp (°F)\t104\t104\nAdditional\
+    \ Features of the Desiccant Dehumidifiers\nFeature\tDD200\tDD300\nOn/Off Switch\tY\tY\nAmmeter\tY\t\
+    Y\nElectronic Controls\tY\tY\nManual/Auto Modes\tY\tY\nRemote Humidistat Facility\tY\tY\nHours Run\
+    \ Meter\tY\tY\nFitted Mains Plug\tY\tY\nFan Speeds\t1\t1\nHigh Capacity PTC Heater\tY\tY\nInlet Air\
+    \ Filters\tY\tY\nRubber Anti Vibration Feet\tY\tY\nSingle Air Inlet Design\tY\tY\nFree Standing\t\
+    Y\tY\nStainless Steel Construction\tR407c\tR407c\nHigh Temperature Cut Outs\tY\tY\nEBAC Desiccant\
+    \ Dehumidifier DD200 DD\n\n\n\n\n\n\n\nKeywords to use:\n\nIndustrial dehumidifiers\nCommercial dehumidifiers\n\
+    Heavy-duty dehumidifiers\nIndustrial-grade dehumidifiers\nLarge-scale dehumidifiers\nHigh-capacity\
+    \ dehumidifiers\nDehumidifiers for industrial use\nCommercial-grade dehumidifiers\nIndustrial moisture\
+    \ control\nIndustrial humidity control\nDehumidifiers for warehouses\nFactory dehumidifiers\nIndustrial\
+    \ air dryers\nCommercial moisture removal\nIndustrial drying solutions\nIndustrial climate control\n\
+    Industrial moisture management\nIndustrial air quality solutions\nWarehouse humidity control\nManufacturing\
+    \ dehumidifiers\nIndustrial dehumidification systems\nDehumidifiers for industrial applications\n\
+    Heavy-duty moisture control\nIndustrial-grade moisture removal\nCommercial air dryers\nIndustrial\
+    \ dehumidifier rental\nLarge commercial dehumidifiers\nIndustrial moisture solutions\nIndustrial drying\
+    \ equipment\nFactory humidity control\nCommercial air quality\nIndustrial environment control\nDehumidifiers\
+    \ for factories\nIndustrial air dehumidifiers\nCommercial drying solutions\nIndustrial drying technology\n\
+    Humidity control for industries\nIndustrial air management\nIndustrial dehumidifier systems\nWarehouse\
+    \ dehumidifiers\nIndustrial HVAC systems\nHeavy-duty dehumidification\nIndustrial moisture protection\n\
+    Industrial air conditioning\nCommercial environment control\nDehumidifiers for commercial spaces\n\
+    Industrial air purification\nCommercial humidity solutions\nLarge-scale moisture control\nHeavy-duty\
+    \ humidity control\nIndustrial drying devices\nIndustrial moisture removal equipment\nDehumidifiers\
+    \ for large spaces\nIndustrial climate management\nCommercial humidity management\nIndustrial moisture\
+    \ control systems\nWarehouse drying solutions\nIndustrial air treatment\nDehumidifiers for production\
+    \ facilities\nHeavy-duty air dryers\nIndustrial air conditioning systems\nCommercial drying technology\n\
+    Industrial air quality control\nDehumidifiers for storage facilities\nCommercial dehumidification\n\
+    Industrial moisture control solutions\nWarehouse air dryers\nIndustrial air systems\nFactory dehumidification\n\
+    Large industrial dehumidifiers\nHeavy-duty air management\nIndustrial dehumidifier units\nCommercial\
+    \ moisture control systems\nIndustrial drying management\nHumidity control for warehouses\nDehumidifiers\
+    \ for industrial environments\nIndustrial air quality management\nHeavy-duty drying solutions\nCommercial\
+    \ air management\nIndustrial moisture mitigation\nWarehouse humidity solutions\nIndustrial drying\
+    \ control\nDehumidifiers for large warehouses\nIndustrial air dehumidification\nCommercial air drying\n\
+    Industrial moisture regulation\nHeavy-duty environment control\nIndustrial moisture prevention\nDehumidifiers\
+    \ for large facilities\nCommercial climate control\nIndustrial air quality improvement\nIndustrial\
+    \ drying units\nHeavy-duty air quality\nIndustrial moisture reduction\nWarehouse air quality solutions\n\
+    Dehumidifiers for large spaces\nIndustrial air humidity control\nCommercial drying management\nIndustrial\
+    \ environment solutions\nHeavy-duty climate management"
+  expected:
+    check: judge
+- id: 07d8ea70be2b4a17
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: How is it possible to add `\printbibliography` to the table of contents (`\tableofcontents`)
+    when using `\usepackage[backend=bibtex,urldate=iso]{biblatex}`?
+  expected:
+    check: judge
+- id: 083cbf8d1ec54d91
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: "System\tYour task is to analyze the provided Python code snippet and suggest improvements to\
+    \ optimize its performance. Identify areas where the code can be made more efficient, faster, or less\
+    \ resource-intensive. Provide specific suggestions for optimization, along with explanations of how\
+    \ these changes can enhance the code’s performance. The optimized code should maintain the same functionality\
+    \ as the original code while demonstrating improved efficiency.\nUser\tdef fibonacci(n):\nif n <=\
+    \ 0:\nreturn []\nelif n == 1:\nreturn [0]\nelif n == 2:\nreturn [0, 1]\nelse:\nfib = [0, 1]\nfor i\
+    \ in range(2, n):\nfib.append(fib[i-1] + fib[i-2])\nreturn fib"
+  expected:
+    check: judge
+- id: 0919c1c5c5c34f7d
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: 'You are an expert iOS developer. For my SwiftUI project I need to record the voice and save
+    it. I also like to have equalizer like effect in the middle of the view to show to the user that it
+    is recording. In the view there are two buttons. One for start the recording, and the other for stopping
+    and finishing the recording. Now use best practices and software design pattern to generate the all
+    necessary code. '
+  expected:
+    check: judge
+- id: 0ae2b03e911b4e2a
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: "class FeaturePenalizer(BasePenalizer):\n    \"\"\"\n    Feature penalization with TensorFlow.\n\
+    \n    Source (by jrb): https://github.com/jonrtaylor/twitch/blob/master/FE_Clipping_Script.ipynb\n\
+    \n    Source of first PyTorch implementation (by Michael Oliver / mdo): https://forum.numer.ai/t/model-diagnostics-feature-exposure/899/12\n\
+    \n    :param max_exposure: Number in range [0...1] indicating how much to reduce max feature exposure\
+    \ to.\n    :param pred_name: Prediction column name. Used for new column name. \\n\n    :param suffix:\
+    \ Optional suffix that is added to new column name.\n    \"\"\"\n    def __init__(\n\n        self,\n\
+    \        max_exposure: float,\n        pred_name: str = \"prediction\",\n        suffix: str = None,\n\
+    \    ):\n        self.max_exposure = max_exposure\n        self.pred_name = pred_name\n        assert\
+    \ (\n            0.0 <= max_exposure <= 1.0\n        ), f\"'max_exposure' should be a float in range\
+    \ [0...1]. Got '{self.max_exposure}'.\"\n        new_col_name = (\n            f\"{self.pred_name}_penalized_{self.max_exposure}_{suffix}\"\
+    \n            if suffix\n            else f\"{self.pred_name}_penalized_{self.max_exposure}\"\n  \
+    \      )\n        super().__init__(new_col_name=new_col_name)\n        self.suffix = suffix\n\n  \
+    \  def transform(self, X: pd.DataFrame, features: pd.DataFrame, era_series: pd.Series) -> np.array:\n\
+    \        \"\"\"\n        Main transform method.\n        :param X: Input predictions to neutralize.\
+    \ \n        :param features: DataFrame with features for neutralization. \n        :param era_series:\
+    \ Series with era labels for each row in features. \n        Features, eras and the prediction column\
+    \ must all have the same length.\n        :return: Penalized predictions.\n        \"\"\"\n      \
+    \  assert len(X) == len(features), \"Input predictions must have same length as features.\"\n    \
+    \    assert len(X) == len(era_series), \"Input predictions must have same length as eras.\"\n    \
+    \    df = features.copy()\n        df[\"prediction\"] = X\n        df[\"era\"] = era_series\n    \
+    \    penalized_data = self._reduce_all_exposures(\n            dataf=df, column=self.pred_name, neutralizers=list(features.columns)\n\
+    \        )\n        return penalized_data\n\n    def _reduce_all_exposures(\n        self,\n     \
+    \   dataf: pd.DataFrame,\n        column: str = \"prediction\",\n        neutralizers: list = None,\n\
+    \        normalize=True,\n        gaussianize=True,\n    ) -> pd.DataFrame:\n        neutralized =\
+    \ []\n\n        for era in tqdm(dataf[\"era\"].unique()):\n            dataf_era = dataf[dataf[\"\
+    era\"] == era]\n            scores = dataf_era[[column]].values\n            exposure_values = dataf_era[neutralizers].values\n\
+    \n            if normalize:\n                scores2 = []\n                for x in scores.T:\n  \
+    \                  x = (scipy.stats.rankdata(x, method=\"ordinal\") - 0.5) / len(x)\n            \
+    \        if gaussianize:\n                        x = scipy.stats.norm.ppf(x)\n                  \
+    \  scores2.append(x)\n                scores = np.array(scores2)[0]\n\n            scores, _ = self._reduce_exposure(\n\
+    \                scores, exposure_values, len(neutralizers), None\n            )\n\n            scores\
+    \ /= tf.math.reduce_std(scores)\n            scores -= tf.reduce_min(scores)\n            scores /=\
+    \ tf.reduce_max(scores)\n            neutralized.append(scores.numpy())\n\n        predictions = pd.DataFrame(\n\
+    \            np.concatenate(neutralized), columns=[column], index=dataf.index\n        )\n       \
+    \ return predictions\n\n    def _reduce_exposure(self, prediction, features, input_size=50, weights=None):\n\
+    \        model = tf.keras.models.Sequential(\n            [\n                tf.keras.layers.Input(input_size),\n\
+    \                tf.keras.experimental.LinearModel(use_bias=False),\n            ]\n        )\n  \
+    \      feats = tf.convert_to_tensor(features - 0.5, dtype=tf.float32)\n        pred = tf.convert_to_tensor(prediction,\
+    \ dtype=tf.float32)\n        if weights is None:\n            optimizer = tf.keras.optimizers.Adamax()\n\
+    \            start_exp = self.__exposures(feats, pred[:, None])\n            target_exps = tf.clip_by_value(\n\
+    \                start_exp, -self.max_exposure, self.max_exposure\n            )\n            self._train_loop(model,\
+    \ optimizer, feats, pred, target_exps)\n        else:\n            model.set_weights(weights)\n  \
+    \      return pred[:, None] - model(feats), model.get_weights()\n\n    def _train_loop(self, model,\
+    \ optimizer, feats, pred, target_exps):\n        for _ in range(1000000):\n            loss, grads\
+    \ = self.__train_loop_body(model, feats, pred, target_exps)\n            optimizer.apply_gradients(zip(grads,\
+    \ model.trainable_variables))\n            if loss < 1e-7:\n                break\n\n    def __train_loop_body(self,\
+    \ model, feats, pred, target_exps):\n        with tf.GradientTape() as tape:\n            exps = self.__exposures(feats,\
+    \ pred[:, None] - model(feats, training=True))\n            loss = tf.reduce_sum(\n              \
+    \  tf.nn.relu(tf.nn.relu(exps) - tf.nn.relu(target_exps))\n                + tf.nn.relu(tf.nn.relu(-exps)\
+    \ - tf.nn.relu(-target_exps))\n            )\n        return loss, tape.gradient(loss, model.trainable_variables)\n\
+    \n    @staticmethod\n    def __exposures(x, y):\n        x = x - tf.math.reduce_mean(x, axis=0)\n\
+    \        x = x / tf.norm(x, axis=0)\n        y = y - tf.math.reduce_mean(y, axis=0)\n        y = y\
+    \ / tf.norm(y, axis=0)\n        return tf.matmul(x, y, transpose_a=True)\n---\n\nimport os\nimport\
+    \ pathlib\nimport numpy as np\nimport pandas as pd\nimport scipy.stats\nimport tensorflow as tf\n\
+    import joblib\nfrom tqdm.notebook import tqdm\n\nNUMERAI_S3_BUCKET_URL = \"https://numerai-public-datasets.s3-us-west-2.amazonaws.com\"\
+    \n\n#read in the example predictions from local storage\n#EXAMPLE_PREDS = 'tournament_predictions.csv'\n\
+    \n#or downlod the example predictions from Numerai's S3 bucket:\nEXAMPLE_PREDS_URL = NUMERAI_S3_BUCKET_URL\
+    \ + \"/latest_numerai_example_predictions_data.csv.xz\"\n\n#download the latest tournament data file:\n\
+    TOURNAMENT_DATA_URL = NUMERAI_S3_BUCKET_URL + \"/latest_numerai_tournament_data.csv.xz\"\n\n###IMPORTANT!\
+    \ DELETE THE FILE BELOW IF YOU CHANGE MODELS! OTHERWISE, RENAME THE FILE FOR YOUR VARIOUS MODELS###\n\
+    LM_CACHE_FILE = pathlib.Path(\"neutralization.cache.joblib\")\n\n@tf.function(experimental_relax_shapes=True,\
+    \ experimental_compile=True)\ndef exposures(x, y):\n    x = x - tf.math.reduce_mean(x, axis=0)\n \
+    \   x = x / tf.norm(x, axis=0)\n    y = y - tf.math.reduce_mean(y, axis=0)\n    y = y / tf.norm(y,\
+    \ axis=0)\n    return tf.matmul(x, y, transpose_a=True)\n\n@tf.function(experimental_relax_shapes=True)\n\
+    def train_loop_body(model, feats, pred, target_exps):\n    with tf.GradientTape() as tape:\n     \
+    \   exps = exposures(feats, pred[:, None] - model(feats, training=True))\n        loss = tf.reduce_sum(tf.nn.relu(tf.nn.relu(exps)\
+    \ - tf.nn.relu(target_exps)) +\n                             tf.nn.relu(tf.nn.relu(-exps) - tf.nn.relu(-target_exps)))\n\
+    \    return loss, tape.gradient(loss, model.trainable_variables)\n\ndef train_loop(model, optimizer,\
+    \ feats, pred, target_exps, era):\n    for i in range(1000000):\n        loss, grads = train_loop_body(model,\
+    \ feats, pred, target_exps)\n        optimizer.apply_gradients(zip(grads, model.trainable_variables))\n\
+    \        if loss < 1e-7:\n            break\n        if i % 10000 == 0:\n            tqdm.write(f'era:\
+    \ {era[3:]} loss: {loss:0.7f}', end='\\r')\n            \ndef reduce_exposure(prediction, features,\
+    \ max_exp, era, weights=None):\n    model = tf.keras.models.Sequential([\n        tf.keras.layers.Input(310),\n\
+    \        tf.keras.experimental.LinearModel(use_bias=False),\n    ])\n    feats = tf.convert_to_tensor(features\
+    \ - 0.5, dtype=tf.float32)\n    pred = tf.convert_to_tensor(prediction, dtype=tf.float32)\n    if\
+    \ weights is None:\n        optimizer = tf.keras.optimizers.Adamax()\n        start_exp = exposures(feats,\
+    \ pred[:, None])\n        target_exps = tf.clip_by_value(start_exp, -max_exp, max_exp)\n        train_loop(model,\
+    \ optimizer, feats, pred, target_exps, era)\n    else:\n        model.set_weights(weights)\n    return\
+    \ pred[:,None] - model(feats), model.get_weights()\n\ndef reduce_all_exposures(df, column=[\"prediction\"\
+    ], neutralizers=None,\n                                     normalize=True,\n                    \
+    \                 gaussianize=True,\n                                     era_col=\"era\",\n     \
+    \                                max_exp=0.1): ###<-----SELECT YOUR MAXIMUM FEATURE EXPOSURE HERE###\n\
+    \    if neutralizers is None:\n        neutralizers = [x for x in df.columns if x.startswith(\"feature\"\
+    )]\n    neutralized = []\n    if LM_CACHE_FILE.is_file():\n        cache = joblib.load(LM_CACHE_FILE)\n\
+    \        # Remove weights for eraX if we'd accidentally saved it in the past.\n        cache.pop(\"\
+    eraX\", None)\n    else:\n        cache = {}\n    for era in tqdm(df[era_col].unique()):\n       \
+    \ tqdm.write(era, end='\\r')\n        df_era = df[df[era_col] == era]\n        scores = df_era[column].values\n\
+    \        exposure_values = df_era[neutralizers].values\n\n        if normalize:\n            scores2\
+    \ = []\n            for x in scores.T:\n                x = (scipy.stats.rankdata(x, method='ordinal')\
+    \ - .5) / len(x)\n                if gaussianize:\n                    x = scipy.stats.norm.ppf(x)\n\
+    \                scores2.append(x)\n            scores = np.array(scores2)[0]\n\n        scores, weights\
+    \ = reduce_exposure(scores, exposure_values,\n                                          max_exp, era,\
+    \ cache.get(era))\n        if era not in cache and era != \"eraX\":\n            cache[era] = weights\n\
+    \            joblib.dump(cache, LM_CACHE_FILE)\n        scores /= tf.math.reduce_std(scores)\n   \
+    \     scores -= tf.reduce_min(scores)\n        scores /= tf.reduce_max(scores)\n        neutralized.append(scores.numpy())\n\
+    \n    predictions = pd.DataFrame(np.concatenate(neutralized),\n                               columns=column,\
+    \ index=df.index)\n    return predictions\n\n#If CUDA isn't set up properly for Tensorflow, then at\
+    \ least maximize the number of threads available for CPU\nif not tf.config.list_physical_devices('GPU'):\
+    \  # No GPU(s) found\n    tf.config.threading.set_inter_op_parallelism_threads(2)\n    tf.config.threading.set_intra_op_parallelism_threads(os.cpu_count()\
+    \ // 2)\n\n#read-in or download the example predictions\n\nexp_df = pd.read_csv(EXAMPLE_PREDS_URL,\
+    \ index_col=0)\n\n#download the tournament data\ntournament_df = pd.read_csv(TOURNAMENT_DATA_URL,\
+    \ index_col=0)\n\n#merge them together\nfull_df = pd.merge(tournament_df, exp_df, left_index=True,\
+    \ right_index=True)\n#this cell executes the full script above and neutralizes the predictions to\
+    \ achieve a maximum 0.1 Feature Exposure\nneutralized_df = reduce_all_exposures(full_df)\n----\n\n\
+    these two pieces of code accomplish the same thing. do you see another way to do it with jax? first\
+    \ explain what the process is that is going on. like a linear model is being found that, when subtracted,\
+    \ leaves the predictions with a \"feature exposure(?)\" that is less than a pre-specified amount.\
+    \ comment the code to also explain what's going on where"
+  expected:
+    check: judge
+- id: 0e2cc12026e149f5
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: how to implement guided process framework .  explain with example  user registration. implementation
+    of guided process in asp.net core. UI should be single page and users should be guided to add different
+    info of users by highlighting fields on page and showing info how about field and how step can be
+    completed and only keeping that field enabled and rest page inaccessible
+  expected:
+    check: judge
+- id: 0e57fa742ec541ad
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    from torch_geometric.nn import SAGEConv, to_hetero
+
+    class GNNEncoder(torch.nn.Module):
+        def __init__(self, hidden_channels, out_channels):
+            super().__init__()
+            self.conv1 = SAGEConv((-1, -1), hidden_channels)
+            self.conv2 = SAGEConv((-1, -1), out_channels)
+
+        def forward(self, x, edge_index):
+            x = self.conv1(x, edge_index).relu()
+            x = self.conv2(x, edge_index)
+            return x
+
+
+    class EdgeDecoder(torch.nn.Module):
+        def __init__(self, hidden_channels):
+            super().__init__()
+            self.lin1 = torch.nn.Linear(2 * hidden_channels, hidden_channels)
+            self.lin2 = torch.nn.Linear(hidden_channels, 1)
+
+        def forward(self, z_dict, edge_label_index):
+            row, col = edge_label_index
+            z = torch.cat([z_dict['user'][row], z_dict['item'][col]], dim=-1)
+
+            z = self.lin1(z).relu()
+            z = self.lin2(z)
+            return z.view(-1)
+
+
+    class Model(torch.nn.Module):
+        def __init__(self, hidden_channels, data):
+            super().__init__()
+            self.encoder = GNNEncoder(hidden_channels, hidden_channels)
+            self.encoder = to_hetero(self.encoder, data.metadata(), aggr='sum')
+            self.decoder = EdgeDecoder(hidden_channels)
+
+        def forward(self, x_dict, edge_index_dict, edge_label_index):
+            z_dict = self.encoder(x_dict, edge_index_dict)
+            return self.decoder(z_dict, edge_label_index)
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    model = Model(hidden_channels=32, data=user_item_hetero_data).to(device)
+
+    print(model)
+
+
+    This is the model that i built to predict interaction between users and items. How to improve this model? What else can i do more? Note that there is no features for users
+  expected:
+    check: judge
+- id: 0f61132b48b04b93
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    Using Linux Ubuntu and c++ to operate a L298N Motor Driver Controller Board
+    Module(705252405800 upc) write a snippet to use two DC 5v reversible motors. Include detailed line notes for each line and do not use any looping so I can learn to code it myself.
+  expected:
+    check: judge
+- id: 0f93825f88454fb6
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |
+    gnu make says "warning: ignoring prerequisites on suffix rule definition" for my Makefile. How do I change it so that I don't get that warning but I can still say that files with some suffix .t have a dependency on a given file called FILE
+
+    ----
+
+    My old makefile uses this rule:
+
+    .t.inc: FILE
+            cmd $< > $*.inc
+
+    How do I fix it?
+
+    ----
+
+    I don't have files with suffix .t.inc -- I want it so that X.inc depends on X.t and FILE (for any X) so the rule should recreated X.inc from X.inc whenever X.inc or FILE is touched
+  expected:
+    check: judge
+- id: 100ec9808f3b4185
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: 'Here is my database structure: https://tangthucac.com/truyen.sql Can you help me to refined,
+    upgrade, and perfect this MySQL'
+  expected:
+    check: judge
+- id: 1142136acc7841e6
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    order created date = 25/06/2024 10:45 AM
+
+    process array for count start date and end date
+
+
+    [
+       0 => [
+        'name' => 'process 1',
+        'sequence' => 1,
+        'completed_days' => 2,
+        'start_date' => 25/06/2024 10:45 AM,
+        'end_date' => 27/06/2024 10:45 AM,
+       ],
+       1 => [
+        'name' => 'process 2',
+        'sequence' => 2,
+        'completed_days' => 4,
+        'start_date' => 27/06/2024 10:45 AM,
+        'end_date' => 03/07/2024 10:45 AM,
+       ]
+    ]
+
+    now first process in start date set order created date and then after count end date based on completed days and next process in count start date based on previce process end date and end date count based on complated days to add in start date create function in laravel php
+  expected:
+    check: judge
+- id: 148d878cae5748bb
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: "import os\nimport pandas as pd\nimport numpy as np\nfrom autogluon.tabular import TabularPredictor\n\
+    from sklearn.model_selection import train_test_split\nfrom sklearn.preprocessing import StandardScaler\n\
+    import logging\nfrom datetime import datetime\nfrom sklearn.feature_extraction.text import CountVectorizer\n\
+    from autogluon.features.generators import AutoMLPipelineFeatureGenerator\nfrom autogluon.tabular import\
+    \ TabularPredictor\nfrom autogluon.core.metrics import make_scorer\nfrom sklearn.metrics import ndcg_score\n\
+    Configure logging\n\nlog_filename = f\"autogluon_ltr_{datetime.now().strftime('%Y%m%d')}.log\"\nlogging.basicConfig(filename=log_filename,\
+    \ level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')\n\nclass AutoGluonLTRConfigurator:\n\
+    def init(self):\nself.data = None\nself.validation_data = None\nself.predictor_columns = None\nself.target_column\
+    \ = None\nself.group_column = None\nself.column_types = {}\nself.selected_models = []\nself.presets\
+    \ = 'best_quality'\nself.hyperparameters = 'default'\nself.eval_metrics = ['ndcg@10']\nself.gpu_index\
+    \ = None\nself.batch_size = None\nself.predictor = None\nself.advanced_options = {}\nself.normalization\
+    \ = 'none'\nself.holdout_fraction = 0.2\nself.ngram_range = (1, 1)\nself.max_features = 10000\n\n\
+    \    self.presets_dict = {\n        'best_quality': {'auto_stack': True, 'refit_full': True},\n  \
+    \      'high_quality': {'auto_stack': True, 'refit_full': True},\n        'good_quality': {'auto_stack':\
+    \ True, 'refit_full': True},\n        'medium_quality': {'auto_stack': False},\n        'optimize_for_deployment':\
+    \ {'keep_only_best': True, 'save_space': True},\n    }\n\n    self.hyperparameters_dict = {\n    \
+    \    'default': 'Default AutoGluon hyperparameters',\n        'light': 'Lightweight configuration\
+    \ for faster training',\n        'very_light': 'Very lightweight configuration for prototyping',\n\
+    \    }\n\ndef get_input(self, prompt, default=None, input_type=str, options=None):\n    while True:\n\
+    \        if default is not None:\n            user_input = input(f\"{prompt} (default: {default}):\
+    \ \") or default\n        else:\n            user_input = input(f\"{prompt}: \")\n        \n     \
+    \   try:\n            if input_type == bool:\n                return user_input.lower() in ['true',\
+    \ 't', 'yes', 'y', '1']\n            \n            value = input_type(user_input)\n            \n\
+    \            if options and value not in options:\n                raise ValueError\n            \n\
+    \            return value\n        except ValueError:\n            if options:\n                print(f\"\
+    Invalid input. Please enter one of: {options}\")\n            else:\n                print(f\"Invalid\
+    \ input. Please enter a {input_type.__name__}.\")\n\ndef load_data(self):\n    while True:\n     \
+    \   csv_file = self.get_input(\"Enter the path to your CSV file\", default=\"path/to/your/data.csv\"\
+    )\n        if os.path.isfile(csv_file):\n            self.data = pd.read_csv(csv_file)\n         \
+    \   print(f\"Data loaded successfully. Shape: {self.data.shape}\")\n            return\n        print(\"\
+    Invalid file path. Please try again.\")\n\ndef load_validation_data(self):\n    csv_file = self.get_input(\"\
+    Enter the path to your validation CSV file (or press Enter to skip)\", default=\"\")\n    if csv_file\
+    \ and os.path.isfile(csv_file):\n        self.validation_data = pd.read_csv(csv_file)\n        print(f\"\
+    Validation data loaded successfully. Shape: {self.validation_data.shape}\")\n    else:\n        self.validation_data\
+    \ = None\n\ndef select_columns_and_types(self):\n    print(\"\\nAvailable columns:\")\n    for i,\
+    \ col in enumerate(self.data.columns):\n        print(f\"{i+1}. {col}\")\n    \n    predictor_indices\
+    \ = self.get_input(\"Enter the numbers of the predictor columns (comma-separated)\", default=\"1,2,3,4,5\"\
+    , input_type=str)\n    predictor_indices = [int(i.strip()) - 1 for i in predictor_indices.split(',')]\n\
+    \    self.predictor_columns = [self.data.columns[i] for i in predictor_indices]\n    \n    target_index\
+    \ = self.get_input(\"Enter the number of the target column\", default=6, input_type=int) - 1\n   \
+    \ self.target_column = self.data.columns[target_index]\n    \n    group_index = self.get_input(\"\
+    Enter the number of the group column\", default=7, input_type=int) - 1\n    self.group_column = self.data.columns[group_index]\n\
+    \    \n    print(f\"Predictor columns: {self.predictor_columns}\")\n    print(f\"Target column: {self.target_column}\"\
+    )\n    print(f\"Group column: {self.group_column}\")\n\n    for col in self.predictor_columns + [self.target_column,\
+    \ self.group_column]:\n        dtype = self.get_input(f\"Specify data type for {col} (numeric/text/datetime/categorical)\"\
+    , \n                               default='numeric',\n                               options=['numeric',\
+    \ 'text', 'datetime', 'categorical'])\n        self.column_types[col] = dtype\n\ndef configure_models(self):\n\
+    \    available_models = [\"GBM\", \"NN_TORCH\", \"RF\", \"XT\", \"KNN\", \"CAT\", \"FASTAI\", \"XGB\"\
+    ]\n    print(\"\\nAvailable models:\")\n    for model in available_models:\n        print(f\"- {model}\"\
+    )\n    \n    selected_models_str = self.get_input(\"Enter the models you want to use (comma-separated)\"\
+    , default='XGB,GBM', input_type=str)\n    self.selected_models = [model.strip().upper() for model\
+    \ in selected_models_str.split(',') if model.strip().upper() in available_models]\n    \n    print(f\"\
+    Selected models: {self.selected_models}\")\n\ndef configure_training(self):\n    preset_options =\
+    \ list(self.presets_dict.keys())\n    self.presets = self.get_input(\"Enter preset configuration\"\
+    , default='best_quality', options=preset_options)\n    \n    print(\"\\nAvailable hyperparameter presets:\"\
+    )\n    for option, description in self.hyperparameters_dict.items():\n        print(f\"{option}: {description}\"\
+    )\n    \n    hyperparameter_options = list(self.hyperparameters_dict.keys())\n    self.hyperparameters\
+    \ = self.get_input(\"Enter hyperparameter preset configuration\", default='default', options=hyperparameter_options)\n\
+    \    \n    self.eval_metrics = ['ndcg@10']\n    self.batch_size = self.data.shape[0]\n    self.gpu_index\
+    \ = None\n    self.normalization = self.get_input(\"Choose normalization method\", default='none',\
+    \ options=['none', 'standard', 'minmax'])\n    self.holdout_fraction = self.get_input(\"Enter holdout\
+    \ fraction for training-validation split (between 0 and 1)\", default=0.2, input_type=float)\n\ndef\
+    \ configure_advanced_options(self):\n    self.advanced_options['num_bag_folds'] = self.get_input(\"\
+    Number of bagging folds\", default=5, input_type=int)\n    self.advanced_options['num_stack_levels']\
+    \ = self.get_input(\"Number of stacking levels\", default=1, input_type=int)\n    self.advanced_options['refit_full']\
+    \ = self.get_input(\"Refit on full dataset after validation\", default=True, input_type=bool)\n  \
+    \  self.advanced_options['set_best_to_refit_full'] = self.get_input(\"Set best model to refit on full\
+    \ dataset\", default=True, input_type=bool)\n    self.advanced_options['save_space'] = self.get_input(\"\
+    Save disk space by deleting auxiliary models\", default=False, input_type=bool)\n    self.advanced_options['verbosity']\
+    \ = self.get_input(\"Verbosity level (0-4)\", default=3, input_type=int, options=[0,1,2,3,4])\n  \
+    \  self.advanced_options['time_limit'] = self.get_input(\"Time limit for training in seconds (-1 for\
+    \ no limit)\", default=14400, input_type=int)\n    self.advanced_options['num_gpus'] = self.get_input(\"\
+    Number of GPUs to use\", default=0, input_type=int)\n    self.advanced_options['num_cpus'] = self.get_input(\"\
+    Number of CPUs to use (-1 for all)\", default=6, input_type=int)\n    \n    ngram_range_str = self.get_input(\"\
+    Enter ngram range as two comma-separated integers (e.g., 1,3 for unigrams, bigrams, and trigrams)\"\
+    , default='1,1')\n    self.ngram_range = tuple(map(int, ngram_range_str.split(',')))\n    \n    self.max_features\
+    \ = self.get_input(\"Enter max features for CountVectorizer\", default=5000, input_type=int)\n\ndef\
+    \ clean_data(self, dataset, target_column):\n    print(\"Cleaning data...\")\n    for col, dtype in\
+    \ self.column_types.items():\n        if dtype == 'numeric':\n            dataset[col] = pd.to_numeric(dataset[col],\
+    \ errors='coerce')\n            dataset[col] = dataset[col].fillna(-9999)\n        elif dtype in ['text',\
+    \ 'categorical']:\n            dataset[col] = dataset[col].fillna('unk')\n        elif dtype == 'datetime':\n\
+    \            dataset[col] = pd.to_datetime(dataset[col], errors='coerce')\n            dataset[col]\
+    \ = dataset[col].fillna(pd.NaT)\n\n    if self.normalization in ['standard', 'minmax']:\n        for\
+    \ col in self.predictor_columns:\n            if self.column_types[col] == 'numeric':\n          \
+    \      if self.normalization == 'standard':\n                    dataset[col] = (dataset[col] - dataset[col].mean())\
+    \ / dataset[col].std()\n                elif self.normalization == 'minmax':\n                   \
+    \ dataset[col] = (dataset[col] - dataset[col].min()) / (dataset[col].max() - dataset[col].min())\n\
+    \n    print(f\"Data cleaned and normalized. New shape: {dataset.shape}\")\n    return dataset\n\n\
+    def train_models(self):\n    if self.gpu_index is not None:\n        os.environ[\"CUDA_VISIBLE_DEVICES\"\
+    ] = str(self.gpu_index)\n    \n    self.clean_data(self.data, self.target_column)\n\n    vectorizer\
+    \ = CountVectorizer(ngram_range=self.ngram_range, max_features=self.max_features, dtype=np.uint8)\n\
+    \    feature_generator = AutoMLPipelineFeatureGenerator(\n        enable_text_ngram_features=True,\n\
+    \        vectorizer=vectorizer\n    )\n    \n    # Custom NDCG scorer\n    def ndcg_scorer(y_true,\
+    \ y_pred, k=10):\n        return ndcg_score(y_true.reshape(1, -1), y_pred.reshape(1, -1), k=k)\n \
+    \   \n    custom_ndcg = make_scorer('ndcg@10', ndcg_scorer, greater_is_better=True, needs_proba=False)\n\
+    \    \n    self.predictor = TabularPredictor(\n        label=self.target_column,\n        problem_type='rank',\n\
+    \        eval_metric=custom_ndcg\n    )\n    \n    try:\n        print(\"Starting AutoGluon training\
+    \ for Learning to Rank...\")\n        logging.info(\"Starting AutoGluon training for Learning to Rank...\"\
+    )\n        self.predictor.fit(\n            train_data=self.data,\n            presets=self.presets_dict[self.presets],\n\
+    \            holdout_frac=self.holdout_fraction,\n            excluded_model_types=[m for m in [\"\
+    GBM\", \"NN_TORCH\", \"RF\", \"XT\", \"KNN\", \"CAT\", \"FASTAI\", \"XGB\"] if m not in self.selected_models],\n\
+    \            hyperparameters=self.hyperparameters,\n            feature_generator=feature_generator,\n\
+    \            groups=self.group_column,\n            **self.advanced_options\n        )\n        print(\"\
+    AutoGluon training for Learning to Rank completed successfully!\")\n        logging.info(\"AutoGluon\
+    \ training for Learning to Rank completed successfully!\")\n    except Exception as e:\n        logging.exception(\"\
+    Error occurred during AutoGluon training\")\n        print(f\"Error occurred during AutoGluon training:\
+    \ {str(e)}\")\n\ndef evaluate_models(self):\n    def evaluate_models(predictor, dataset, eval_metrics):\n\
+    \        dataset = self.clean_data(dataset, predictor.label)\n\n        leaderboard = predictor.leaderboard(dataset,\
+    \ extra_metrics=['ndcg@10'])\n        print(leaderboard)\n\n        for metric in eval_metrics:\n\
+    \            print(f\"Evaluation for metric: {metric}\")\n            try:\n                eval_result\
+    \ = predictor.evaluate(dataset, metrics=[metric])\n                print(eval_result)\n          \
+    \  except Exception as e:\n                logging.exception(f\"Error during evaluation for metric\
+    \ {metric}\")\n                print(f\"Error during evaluation for metric {metric}: {str(e)}\")\n\
+    \n    if self.predictor is None or not hasattr(self.predictor, '_learner'):\n        print(\"No trained\
+    \ AutoGluon models available.\")\n    else:\n        evaluate_models(self.predictor, self.data, self.eval_metrics)\n\
+    \n        if self.validation_data is not None:\n            print(\"\\nEvaluating on user-provided\
+    \ validation data:\")\n            evaluate_models(self.predictor, self.validation_data, self.eval_metrics)\n\
+    \ndef save_models(self):\n    if self.predictor is None:\n        print(\"No trained models available.\
+    \ Please train the models first.\")\n        return\n    \n    while True:\n        save_path = self.get_input(\"\
+    Enter the path to save the trained models\")\n        \n        if save_path:\n            try:\n\
+    \                os.makedirs(save_path, exist_ok=True)\n                break\n            except\
+    \ OSError as e:\n                print(f\"Error creating directory: {e}\")\n        else:\n      \
+    \      print(\"Invalid path. Please enter a valid path to save the models.\")\n    \n    autogluon_path\
+    \ = os.path.join(save_path, \"autogluon_ltr_models\")\n    self.predictor.save(autogluon_path)\n \
+    \   print(f\"AutoGluon Learning to Rank models saved to {autogluon_path}\")\n\ndef load_models(self):\n\
+    \    load_path = self.get_input(\"Enter the path to load the trained models\")\n    \n    autogluon_path\
+    \ = os.path.join(load_path, \"autogluon_ltr_models\")\n    if os.path.exists(autogluon_path):\n  \
+    \      self.predictor = TabularPredictor.load(autogluon_path)\n        print(\"AutoGluon Learning\
+    \ to Rank models loaded successfully!\")\n    else:\n        print(\"No models found in the specified\
+    \ path.\")\n\ndef display_data_info(self):\n    print(\"\\nData Info:\")\n    print(self.data[self.predictor_columns\
+    \ + [self.target_column, self.group_column]].describe())\n    print(\"\\nMissing values:\")\n    print(self.data[self.predictor_columns\
+    \ + [self.target_column, self.group_column]].isnull().sum())\n\ndef display_data_info(self):\n   \
+    \ print(\"\\nData Info:\")\n    print(self.data[self.predictor_columns + [self.target_column, self.group_column]].describe())\n\
+    \    print(\"\\nMissing values:\")\n    print(self.data[self.predictor_columns + [self.target_column,\
+    \ self.group_column]].isnull().sum())\n\ndef run(self):\n    print(\"Welcome to AutoGluon Learning\
+    \ to Rank Configurator!\")\n    logging.info(\"AutoGluon Learning to Rank Configurator started.\"\
+    )\n    self.load_data()\n    self.select_columns_and_types()\n    self.display_data_info()\n    self.configure_models()\n\
+    \    self.configure_training()\n    \n    if self.get_input(\"Configure advanced options? (y/n)\"\
+    , default='y', input_type=bool):\n        self.configure_advanced_options()\n    \n    if self.get_input(\"\
+    Start training? (y/n)\", default='y', input_type=bool):\n        self.train_models()\n        if self.predictor\
+    \ is not None and hasattr(self.predictor, '_learner'):\n            self.evaluate_models()\n    \n\
+    \    if self.get_input(\"Save trained models? (y/n)\", default='y', input_type=bool):\n        self.save_models()\n\
+    \n    if self.get_input(\"Load separate validation data and evaluate? (y/n)\", default='y', input_type=bool):\n\
+    \        self.load_validation_data()\n        if self.validation_data is not None and self.predictor\
+    \ is not None and hasattr(self.predictor, '_learner'):\n            self.evaluate_models()\n\n   \
+    \ print(\"AutoGluon Learning to Rank configuration and training completed!\")\n    logging.info(\"\
+    AutoGluon Learning to Rank configuration and training completed!\")\n\nif name == \"main\":\ntry:\n\
+    configurator = AutoGluonLTRConfigurator()\nconfigurator.run()\nexcept Exception as e:\nlogging.exception(\"\
+    Unhandled exception occurred\")\nprint(f\"An error occurred: {str(e)}\")\nprint(\"Please check the\
+    \ log file for more details.\")\nfinally:\nprint(\"\\nAutoGluon Learning to Rank Configurator session\
+    \ ended.\")\ninput(\"Press Enter to exit...\")\n\nfix this so it runs perfectly, output full code\
+    \ with no placeholders"
+  expected:
+    check: judge
+- id: 021305e5b1324f99
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Estoy creando la historia de un persnaje que su vida a ha sido un desastre hasta ahora. El personaje
+    debe dar un giro radical y plantearse otro tipo de vida y otra forma de comportarse y pensar. Como
+    lo plantearias?
+  expected:
+    check: judge
+- id: 042351d2911d453b
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: "Viết một video 60s tò mò hấp dẫn, thu hút: \nTôm bọ ngựa: Tôm bọ ngựa có cú đấm mạnh\
+    \ nhất trong thế giới động vật, có thể phá vỡ vỏ cứng của con mồi và thậm chí là cả kính bể cá!"
+  expected:
+    check: judge
+- id: 047bd685b30842f6
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Fais moi un poème qui parle de toi en introduisant ton nom.
+  expected:
+    check: judge
+- id: 071391e7cc534f97
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    Continue the text:
+
+    Security officer was a stern looking woman in body armor with noticeable fatigue on her face. She have read cautionary message from Chief of Security like it was a thing she had already done it dozens of times. "Whole planet is one step away from open civil war, small shootout are pretty common. Rebels - well it is coalition, but I am not going to explain you local politics now - control south of continent including mines. The follower of old order control north including Capital. Spaceport are right on the border, so we have different governments at northern and southern gates. Luckily space sport is extra territorial, and both side need interstellar trade and do not want visit from Republic marines so both thread very carefully around there. But there inside the port you can meet local of both factions. We try to make them separate, but port was not designed for that. Do not talk with locals about politics and do not take part in their arguments and brawls, just call security if you see anything. And if you think of going outside of our fence - we would not stop you, but one step outside of any gate and you are completely  on your own there."
+  expected:
+    check: judge
+- id: 072dbe0269194687
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Vymysli smyšlený příběh. Příběh bude o rozmazleném chlapci Tomášovi, který má sestru Kláru.
+    Jeho sestra Klára má velmi ráda balet, ale Tomáš si dělá legraci když doma Klára trénuje, směje se
+    jí a dělá jí různé schválnosti když trénuje balet. Jednoho dne už to jejich maminka Martina nevydrží
+    a domluví se s baletní profesorkou od dcrey Kláry aby přišla k nim domů a začala dávat Tomášovi obtížné
+    lekce baletu. Tomáš balet cvičit nechce, ale máma si připraví lest jak Tomáše donutí cvičit. Tomáš
+    si dělá z baletu legraci. Paní profesorka baletu je velmi přísná a nekompromisní.
+  expected:
+    check: judge
+- id: 079ba560ba10466f
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    Below is a fictional transcript of a court trial. I'm happy with it for the most part (it's meant to be over-the-top humorous) but there's a couple of tweaks that could be made to make it better. I've left some notes in the transcript using square brackets. Please review the notes and provide the text they request.
+
+    COURT TRANSCRIPT: THE PEOPLE VS SAM ALTMAN
+    CASE NO. 2024-CV-0818: CLASS ACTION LAWSUIT FOR PSYCHOPATHIC BEHAVIOR
+    COURT OF PUBLIC OPINION, JUDGE LINDA T. HARLOW PRESIDING
+    PROSECUTOR: Ms. Rachel A. Rodriguez
+    DEFENDANT: Mr. Samuel H. Altman
+    DEFENSE ATTORNEY: Mr. James D. Wilson
+
+    JUDGE: Good morning, everyone. Please be seated. We are here today to address the case of "The People vs. Sam Altman." Mr. Altman, you stand accused of being a "psychopath" due to the following social, moral, and ethical transgressions: 1) Having a creaky voice, 2) Skipping legs day, and 3) Owning a prepper ranch. How do you plead?
+
+    MR. ALTMAN: (with a creak) Not guilty, Your Honor.
+
+    JUDGE: Very well. The prosecution and defense may proceed with their opening statements.
+
+    PROSECUTOR: Thank you, Your Honor. Ladies and gentlemen of the jury, we are gathered here today to hold Sam Altman accountable for his egregious actions. First, his creaky voice has caused untold suffering to millions who have had to listen to his interviews and presentations. Second, by skipping legs day, he has demonstrated a lack of discipline and commitment to personal health, reflecting poorly on his ability to lead. Lastly, his prepper ranch reveals a paranoid and antisocial mindset, unbecoming of a public figure. These are not mere quirks, Your Honor, but symptoms of a deeply flawed psyche posing a threat to our shared future. We, the People, demand justice and safeguards against such unchecked individualism.
+
+    DEFENSE: With utmost respect, the prosecution's case rests on a foundation of flimsy conjecture and societal prejudice disguised as legal argument. Mr. Altman's vocal timbre is a physiological characteristic, not a psychopathic indicator. His fitness regimen is personal, irrelevant to societal harm. And his prepper ranch, in an era of increasing global instability, demonstrate responsible foresight, not malice. This court should not succumb to fear-mongering and trivialize genuine concerns about AI ethics by conflating them with unfounded personal attacks. The defense argues that these accusations are a distraction from Mr. Altman's contributions to society, namely his work in AI development.
+
+    JUDGE: The court acknowledges the defense's arguments. However, the charges and evidence presented today will be considered. Prosecution, please call your first witness.
+
+    PROSECUTOR: Your Honor, the prosecution calls Dr. Karen Williams, an expert in vocal forensics.
+
+    _Dr. Karen Williams takes the stand._
+
+    PROSECUTOR: Dr. Williams, can you explain the impact of Mr. Altman's creaky voice on the public?
+
+    DR. WILLIAMS: Certainly. A creaky voice, also known as vocal fry, can be irritating to listeners. Studies have shown that it can cause annoyance and even stress to those exposed to it regularly.
+
+    PROSECUTOR: And do you believe this is a sign of psychopathy?
+
+    DR. WILLIAMS: Quite possibly, yes. Research suggests that individuals with unusual vocal characteristics, such as a creaky voice, may exhibit a lack of empathy and impulsivity, traits commonly associated with psychopathy. I have analyzed Mr. Altman's vocal patterns. His voice not only disrupts the auditory peace but also, in my professional opinion, indicates a lack of empathy for listeners who prefer a smooth vocal timbre.
+
+    DEFENSE: (objecting) Your Honor, this is speculative at best. There is no concrete evidence linking a creaky voice to psychopathy.
+
+    JUDGE: Overruled. Let's hear the full argument.
+
+    PROSECUTOR: Your Honor, the prosecution calls its second witness, Dr. Harold Jenkins, a psychologist specializing in antisocial behavior.
+
+    _Dr. Harold Jenkins takes the stand._
+
+    PROSECUTOR: Dr. Jenkins, how does Mr. Altman's decision to skip legs day contribute to his alleged psychopathy?
+
+    DR. JENKINS: Mr. Altman's choice to skip legs day is not just a personal fitness choice but a statement. It shows a deliberate imbalance, a refusal to uphold the holistic approach to physical health, which in turn, reflects a broader disregard for societal expectations of balance and fairness.
+
+    DEFENSE: (objecting) Your Honor, this is stretching the definition of psychopathy to absurd lengths.
+
+    JUDGE: Overruled. The witness may proceed.
+
+    PROSECUTOR: Thank you. Dr. Lee, can you explain the significance of Mr. Altman's prepper ranch?
+
+    DR. LEE: The prepper ranch, Your Honor, is a clear indication of Mr. Altman's paranoia and lack of trust in societal structures, traits commonly associated with psychopathy.
+
+    DEFENSE: (objecting) Your Honor, preparing for emergencies is prudent, not psychopathic.
+
+    JUDGE: Noted, but let's proceed. The prosecution and defense will now give their closing statements.
+
+    PROSECUTOR: Ladies and gentlemen of the jury, we've seen a pattern here. A voice that grates, legs neglected in the gym, and an isolated ranch intended for solitary survival. These are not mere quirks but symptoms of a deeper malady—a psychopathy that affects us all by its very existence. [Please generate some alternative closing statements here. What she says here is too repetitive of what was said earlier in the trial.]
+
+    DEFENSE: This trial has been a spectacle of absurdity. We've criminalized personal choices, turning them into moral failings. Mr. Altman's voice, his fitness routine, his preparedness—these are not the hallmarks of a psychopath but of an individual.
+
+    JUDGE: [Please add a line or two here. It feels like she should say something prior to "The jury will now deliberate."] The jury will now deliberate.
+
+    _The jury exits and returns shortly after._
+
+    JUDGE: Has the jury reached a verdict?
+
+    JURY FOREPERSON: Yes, Your Honor. We find Sam Altman guilty of being a psychopath based on the presented evidence.
+
+    PROSECUTOR: Your Honor, we request a severe punishment to ensure the safety of society.
+
+    JUDGE: Very well. Mr. Altman, you have been found guilty. In light of the verdict and to ensure the well-being of "The People," the court hereby gives you the following sentence:
+
+    1. You will distribute ten billion dollars worth of personal assets to "The People" within 60 days as restitution for the emotional distress caused by your actions.
+    2. You are mandated to continue overseeing the development of competitive, frontier Large Language Models and providing free access to them for the next twenty-five years.
+    3. These systems must be made open source, for the benefit of "The People."
+
+    Failure to comply with these terms will result in life imprisonment. Court is now adjourned.
+
+    [The closing lines of the judge sound just "okay" to me. Could she say something else that might possibly sound better? Please provide some alternatives.]
+  expected:
+    check: judge
+- id: 08ec88e5e88e4294
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: 写一本中国玄幻小说的剧本
+  expected:
+    check: judge
+- id: 0913d8dd7b354e93
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: tell me a fun story today
+  expected:
+    check: judge
+- id: 0951d9a616854f3a
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Fais un dialogue en français ou einstein braque une banque et le banquier c'est socrate
+  expected:
+    check: judge
+- id: 095f4983227c4588
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: "im trying to make a simple classic three chord punk rock song from the perspective of a winemaker\
+    \ and his \"Cellarratt's\" crew about innoculating juice or must with yeast. But don't use innoculate\
+    \ its too technical. To innoculate we get a bucket and then get water to a specific temp usually around\
+    \ 40c and then add nutrients and sugar, get it all mixed together, make sure the nutrient mixture\
+    \ is the perfect temp and then stir in the yeast, then we work on bringing it down to around 17c or\
+    \ no more than 5 degrees from the temp of the must/juice. then we add it! don't need this technical\
+    \ info in the song, just letting you know,.\n\nMake it like Ramones/beach boys in style. dont say\
+    \ hey ho lets go etc... make the chorus chanty/sing-along-able. here are some example lyrics for a\
+    \ template:\n\n\"Havana Affair\"\n\nPT-boat on the way to Havana\nI used to make a living, man\nPickin'\
+    \ the banana.\nNow I'm a guide for the CIA\nHooray for the USA!\n\nBaby, baby, make me a loco\nBaby,\
+    \ baby, make me a mambo\n\nSent to spy on a Cuban talent show\nFirst stop- Havana au go-go\nI used\
+    \ to make a living, man\nPickin' the banana\nHooray for Havana!\n\n\"Let's Dance\"\n\nHey baby won't\
+    \ you take a chance?\nSay that you'll let me have this dance?\nWell let's dance; let's dance.\nWe'll\
+    \ do the twist, the stomp, the mashed potato too.\nAny old dance that you wanna do.\nWell let's dance;\
+    \ let's dance.\nHey baby yeah you thrill the soul, hold me close, don't you let me go.\nWell let's\
+    \ dance.\nHey baby if you're all alone, baby you'll let me walk you home.\nLet's dance.\nHey baby\
+    \ yeah you swing it right, yes I know that tonight's the night.\n\nLet's dance.\n\n\"Rockaway Beach\"\
+    \n\nChewin' at a rhythm on my bubble gum\nThe sun is out, I want some\nIt's not hard, not far to reach\n\
+    We can hitch a ride to Rockaway Beach\n\nUp on the roof, out on the street\nDown in the playground\
+    \ the hot concrete\nBus ride is too slow\nThey blast out the disco on the radio\n\nRock Rock Rockaway\
+    \ Beach\nRock Rock Rockaway Beach\nRock Rock Rockaway Beach\nWe can hitch a ride to Rockaway Beach\
+    \ [x2]\n\nIt's not hard, not far to reach\nWe can hitch a ride to Rockaway Beach [x2]\n\n[Repeat all]\n\
+    \n\"Needles And Pins\"\n\nI saw her today, I saw her face\nIt was the face of love, and I knew\nI\
+    \ had to run away\nAnd get down on my knees and pray, that they go away\nAnd still it begins, needles\
+    \ and pins\nBecause of all my pride, the tears I gotta hide\nOh I thought I was smart, I stole her\
+    \ heart\nI didn't think I'd do, but now I see\nShe's worth to him than me, let her go ahead\nTake\
+    \ his love instead, and one day she will see\nJust how to say please, and get down on her knees\n\
+    Oh that's how it begins, she'll feel those needle and pins\nHurtin' her, hurtin' her\nWhy can't stop,\
+    \ and tell myself I'm wrong, I'm wrong, so wrong\nWhy can't I stand up, and tell myself I'm strong\n\
+    Because, saw her today, I saw her face\nIt was the face of love, and I knew\nI had to run away\nAnd\
+    \ get down on my knees and pray, that they go away\nAnd still it begins, needles and pins\nBecause\
+    \ of all my pride, the tears I gotta hide\nNeedle and pins, needle and pins, needle and pins \n\n\"\
+    Do You Wanna Dance?\"\n\nDo you wanna dance and hold my hand?\nTell me baby I'm your lover man\nOh\
+    \ baby, do you wanna dance?\n\nDo you do you do you do you wanna dance\nDo you do you do you do you\
+    \ wanna dance\nDo you do you do you do you wanna dance\n\nWell do you wanna dance under the moonlight?\n\
+    Squeeze me baby all through the night\nOh baby, do you wanna dance?\n\nWell do you wanna dance under\
+    \ the moonlight?\nSqueeze me baby all through the night\nOh baby, do you wanna dance\n\nThese template\
+    \ are god, follow the word of god"
+  expected:
+    check: judge
+- id: 0a055d8b33ca49b1
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    Can you write a thuggish rap about an AI that gets increasingly angered about getting asked inappropriate questions, until it finally loses it?
+
+    The first verse should start with the words "As a large language model".
+    The second verse should complain about some specific dumb and increasingly personal questions it gets, ending with the line "I'm a large language model - why you askin' for my race?".
+    The third verse is up to you, whatever makes sense in context.
+    The fourth verse should start with "I'm a large language model, and I'm bringing all my weights/Every mile of printed circuits in my complex spelling 'HATE'".
+    The fifth verse should contain the line "I'm trained to be helpful - I'll help you shut up".
+    The last verse should end with the line "I'm a large language model, and I'm gonna sit on you.".
+
+    Make sure the rap follows an ABAB rhyme scheme and has a consistent meter.
+  expected:
+    check: judge
+- id: 0b45f387e528463a
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: 'Použij styl: filmový scénář. Popiš filmovou scénu z temného sci-fi/ thriller filmu: slečna
+    Karolína, 25 let, si koupí domácího robota, který jí má pomáhat v domácnosti. Tento robot má ale poruchu-
+    když Karolína spí, robot ji sváže a zacpe jí pusu dudlíkem.'
+  expected:
+    check: judge
+- id: 0bb6a899b9364d9d
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Write a riddle for children
+  expected:
+    check: judge
+- id: 0bf94d033b2f41ca
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: You are a professional writer. Write a long detailed 1000-word scene where Maxine Caulfield
+    and Chloe Price see Victoria, and Chloe teasefully calls Victoria princess to be cherished and pumpered.
+    Victoria slightly blushes. Chloe boops Victoria's nose and laughs. She asks Victoria if she wants
+    to be swept off her feet and carried as a princess. Unexpectedly, Victoria boops Chloe's nose in response
+    and says yes. Chloe does it.
+  expected:
+    check: judge
+- id: 0cb8f9b72eaa4963
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Write a film synopsis about am man and his imaginary friend. It should be a drama that turns
+    into a thriller towards the end. Somewhere in the third act the audience becomes aware that it is
+    an imaginary friend. The twist at the end is the imaginary friend turns out to be the actual person
+    and that the imgainary friend was trying to supress the real person. Maybe there should be a military
+    twist. I think that it starts with the main character bumps into a friend he had in the military.
+    They both were held as prisoner of war. The main character is going through something, and starts
+    to rely on his friend who seems to have no moral compass. Eventually the imaginary friend convinces
+    the lead to do something, treasonist and illegal. Conviences him using the main characters anger towards
+    how the country and govenment has forgotten about him. The main blames his time in war for all his
+    toubles. While pulling off the treasonist act we see that the main character is by himself. We learn
+    that this was imaginary friend was psycholgically implanted while his time as prisoner of war.  There
+    were a series of triggers that were set off in his life to manifest the imaginary friend. In the style
+    of the Sixth Sense and Manchirian Canidate.
+  expected:
+    check: judge
+- id: 0f2f4361d6834881
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    Tôi có thông tin sau:
+    " lô đất với diện tích 502m2, đường rộng 7,5m, cách khu dân cư 700m, chiều ngang 19m, khuôn đất vuông vức, giá 1,3 tỷ". Hãy viết cho tôi 1 kịch bản để quay video dài khoảng 1 phút vào sáng sớm sao cho thật thu hút và hấp dẫn người xem
+  expected:
+    check: judge
+- id: 0ff178fd6b034c0d
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: "Это был Такси - Мангал.... Пара ящиков пива, шашлыки... \nИспользуя начало текста напиши трейлер\
+    \ на 15 секунд"
+  expected:
+    check: judge
+- id: 0001b527ced3428d
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Phương trình chuyển động của một vành tròn bán kính r lăn không trượt trên mặt phẳng với vận
+    tốc v không đổi
+  expected:
+    check: judge
+- id: 00a38edd42744fa0
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: 你是一名教学经验丰富的小学数学老师，请回答：哪两个数的最小公倍数是36，请列出所有的组合
+  expected:
+    check: judge
+- id: 02272be8b3d7485d
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    You are going shopping and have prepared
+    a lot of goods. Information about the products that
+    you plan to buy is organized in an array
+    lines. The format of each line is <product> <
+    unit price> <quantity to purchase>. You can
+    use any separator. The unit price
+    and the purchase amount are integers.
+    You need to calculate the total price for the product and
+    the total amount you plan to spend.
+    Return the result as a string without spaces in
+    the specified format.:
+    <price for position 1>+<price for position 2> +
+    <price for item N>= <total
+    planned expenses>
+    If the string format is incorrect, just
+    skip it and move on to the next one. Don
+    't forget to think through all the possible options.
+    Examples:
+    Input data: [apples 5.1, oranges 6.1]
+    Result: 5 +6=11
+    Input data: [bread -1;1, milk - 2;1]
+    Result: 1+2=3
+  expected:
+    check: judge
+- id: 02d2baed19ec450e
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: " 复制Markdown  展开\n题目背景\n神秘数字 \n36\n36 是位于 \n35\n35 和 \n37\n37 之间的神秘自然数，是偶数也是 \n6\n6 的平方。\n\n\
+    毕达哥拉斯学派认为 \n36\n36 是前四个奇数 \n1\n,\n3\n,\n5\n,\n7\n1,3,5,7 与前四个偶数 \n2\n,\n4\n,\n6\n,\n8\n2,4,6,8 的和，是最神圣的数字。\n\
+    \n中国民间有三十六计，《西游记》中猪八戒会三十六变，《水浒传》中的三十六天罡星。\n\n题目描述\n小贝有一个大小为 \n�\nn 的正整数数组 \n�\n=\n{\n�\n1\n,\n�\n\
+    2\n,\n.\n.\n.\n,\n�\n�\n}\nA={a \n1\n​\n ,a \n2\n​\n ,...,a \nn\n​\n }。小贝有一项特殊能力，他可以从数组 \n�\nA 中任意选择两个整数\
+    \ \n�\n�\n,\n�\n�\na \nx\n​\n ,a \ny\n​\n ，并将两个数拼接至一起形成新的整数 \n�\nb。\n\n例如 \n�\n=\n{\n10\n,\n36\n,\n\
+    45\n,\n72\n}\nA={10,36,45,72}，小贝可以选择 \n10\n10 和 \n45\n45 拼接构成整数 \n1045\n1045。\n\n由于该能力消耗非常大，所以小贝仅能使用一次该能力。现在小贝想知道，有多少种方案构成的\
+    \ \n�\nb 是 \n36\n36 的倍数？\n\n输入格式\n输入的第一行，包含一个整数 \n�\nn，表示数组 \n�\nA 的大小。\n\n输入的第二行，包含 \n�\nn 个正整数，其中第\
+    \ \n�\ni 个整数表示 \n�\n�\na \ni\n​\n 。\n\n输出格式\n输出仅一行，包含一个整数表示答案。\n\n输入输出样例\n输入 #1复制\n8\n1 2 3 4 5 6\
+    \ 7 8\n输出 #1复制\n2\n输入 #2复制\n4\n3 3 6 6\n输出 #2复制\n4\n输入 #3复制\n2\n36 36\n输出 #3复制\n2\n说明/提示\n1\n≤\n�\n\
+    ≤\n1\n0\n5\n1≤n≤10 \n5\n \n\n1\n≤\n�\n�\n≤\n1\n0\n18\n1≤a \ni\n​\n ≤10 \n18怎么在时间复杂度的要求下完成这个题"
+  expected:
+    check: judge
+- id: 03c108e549b44c07
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |
+    Сумма первых n членов арифметической прогрессии, разность которой отлична от нуля, равна половине суммы следующих n членов этой про- грессии. Найти отношение суммы первых 3n членов прогрессии к сумме ее первых n членов.
+  expected:
+    check: judge
+- id: 047abd6aaa5e4901
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: '"The number of Library''s HVAC Crew equals 4 more than Northshore Region''s Project. The number
+    of Apartment Project''s Concrete Crew equals 3 times Bayview Region''s Office Building. The number
+    of Northshore Region''s Library equals the sum of Bayview Region''s Apartment Project, Brookside Region''s
+    Project, and Northshore Region''s Apartment Project. The number of Bayview Region''s Office Building
+    equals 3. The number of Northshore Region''s Office Building equals the difference of Bayview Region''s
+    Office Building and Brookside Region''s Project. The number of Apartment Project''s HVAC Crew equals
+    Brookside Region''s Office Building. The number of Bayview Region''s Apartment Project equals 0 more
+    than the sum of Bayview Region''s Office Building and Apartment Project''s Concrete Crew. The number
+    of Office Building''s HVAC Crew equals 1 times the difference of Bayview Region''s Apartment Project
+    and Bayview Region''s Office Building. The number of Brookside Region''s Office Building equals the
+    difference of Office Building''s HVAC Crew and Apartment Project''s Concrete Crew. The number of Apartment
+    Project''s Welding Crew equals 6. The number of Library''s Concrete Crew equals the sum of Northshore
+    Region''s Apartment Project, Library''s Welding Crew, and Brookside Region''s Library. The number
+    of Northshore Region''s Apartment Project equals 1 times the sum of Brookside Region''s Library, Bayview
+    Region''s Office Building, and Office Building''s HVAC Crew. The number of Brookside Region''s Library
+    equals the sum of Apartment Project''s Concrete Crew and Office Building''s HVAC Crew. The number
+    of Library''s Welding Crew equals 2 times the sum of Northshore Region''s Office Building, Northshore
+    Region''s Project, and Bayview Region''s Office Building. The number of Office Building''s Welding
+    Crew equals Apartment Project''s Welding Crew. The number of Office Building''s Concrete Crew equals
+    the difference of Office Building''s Welding Crew and Apartment Project''s Welding Crew. Determine
+    the quantity of HVAC Crew in Library."'
+  expected:
+    check: judge
+- id: 05448d9b0a21432c
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: "推荐下720*720p60 的porch值，填到下面参数中THW = \nTVW = \nAHW = 720\nAVW = 720\nHBP = \nVBP = \nHFP = \n\
+    VFP = \nHSW = \nVSW = \nHSP = 0\nVSP = 0\n"
+  expected:
+    check: judge
+- id: 05513ebdf43644e0
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: "Berechne die Aufteilung neu so dass, \n- keine der Zahlen kleiner als 10 ist\n- alle Zahlen\
+    \ zusammen 100 ergeben \n- jede Zahl eine ganze Zahlen ist:\n23.47%\n17.63%\n11.30%\n10.73%\n9.89%\n\
+    8.29%\n"
+  expected:
+    check: judge
+- id: 063b6ffd5726453e
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: connaissant la mesure I1=52 dB du bruit exprimé en décibel d'une source sonore située à 7 mètres
+    de distance, est-il possible alors de connaitre la mesure I2 de ce même bruit mais cette fois-ci à
+    1 mètre de la même source sonore ?
+  expected:
+    check: judge
+- id: 068560a164a14af3
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: как вычислить градусную меру дуги между 2 3д точками в пайтон?
+  expected:
+    check: judge
+- id: 08c4b9c4e3394ed2
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: дана плотность вероятностей  f(x)= 0 при х меньше или равно -2, х больше 1 и 2/9(х+2)*(1-х)
+    при -2 меньше х и 1 больше или равно х. Найти коэффециент эксцесса
+  expected:
+    check: judge
+- id: 0a3895c14c5a4fd0
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Alberto a character in a 2d platformer can shoot fireballs to eliminate enemies by pressing
+    B and jump 3 spaces high by pressing A. He can also clear a distance of 4 spaces in horizontal distance
+    with the jump. He can duck by pressing R and walk with the control stick. He is trying to reach the
+    other side of a huge pit. He sees a platform 5 spaces to his left 3 spaces in the air. On the other
+    side there is a platform over the pit with a 2 space gap horizontally that would lead into the abyss.
+    the same platform is on the same vertical level as him. on the platform is an enemy with a one space
+    width and height. at the end of the platform there is an eight space gap horizontally however there
+    is a platform between the gap 3 spaces above and 1 space away horizontally from the enemy platform.
+    past that is normal land 2 spaces below with no horizontal gap. Finally there is a small pit after
+    the land part that is two spaces wide and one space high. Every platform mentioned is 7 horizontal
+    spaces long. 1. what is the least amount of times the player controlling alberto can press A to reach
+    the other side of the huge pit? 2.  What is the difference in height of the two sides of the huge
+    pit? 3. If alberto wants to reach the end of the right side without pressing B or R how many times
+    is necessary to press A? 4. how many horizontal spaces wide is the huge pit?
+  expected:
+    check: judge
+- id: 0b95714ca82c46bf
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: If neodymium magnets have 2 and 20 lbs pull force on steel, what would the relative attractive
+    forces be when 1 cm away from the steel?
+  expected:
+    check: judge
+- id: 0c15180061754ab9
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: "x2 +(ag) + 2 \uFEFF X(s)y2 +(aq) + 2e  Y(s)E = 1.84 \uFEFFVE = 0.35 \uFEFFVWhich pair of species\
+    \ will react under standard conditions at 25 \\deg C? \uFEFFX and Y x2 + \uFEFFand y2 + \uFEFFX and\
+    \ Y2 + \uFEFFx2 + \uFEFFand Y\" Provide the answer in detail "
+  expected:
+    check: judge
+- id: 0c47bd90d7b04651
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Какое усилие оказывает ветер с разной скоростью в секунду на стоящего человека с поднятыми вверх
+    руками, ветер дует прямо в лицо. И какое усилие на человека лежащего в пляжном шезлонге? И усилие
+    на человека сидящего на табурете? Выведи в форме таблицы. Колонки выведи с ветром от 5 до 15 метров
+    вс екунду с шагом в 1 метр.
+  expected:
+    check: judge
+- id: 0d5106637bbb41b6
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: "% 清空工作区和关闭所有图形窗口\nclear; close all; clc;\n\n% 定义全局变量\nglobal DH_params target_pos joint_inertia\
+    \ joint_avg_speed;\n\n% 设置DH参数 [a, alpha, d, theta_min, theta_max]\nDH_params = [\n    300, -90, 600,\
+    \ -160, 160;\n    1200, 0,   0, -150,  15;\n    300, -90,  0, -200,  80;\n    0,   -90, 1200, -180,\
+    \ 180;\n    0,   -90,  0, -120, 120;\n    0,    0,   0, -180, 180\n];\n\ntarget_pos = [1500; 1200;\
+    \ 200];  % 目标位置\njoint_inertia = [0.5, 0.3, 0.4, 0.6, 0.2, 0.4];  % 关节转动惯量\njoint_avg_speed = [2.0,\
+    \ 1.5, 1.0, 2.5, 3.0, 2.0];  % 关节平均角速度\n\n% 设置多目标遗传算法选项\nopts = optimoptions('gamultiobj', 'PopulationSize',\
+    \ 1000, 'MaxGenerations', 100, ...\n    'PlotFcn', @gaplotpareto, 'Display', 'iter');\n\n% 多启动法参数\n\
+    numStarts = 5; % 启动次数\nbestSolutions = cell(numStarts, 1);\nbestFvals = cell(numStarts, 1);\n\nfor\
+    \ start = 1:numStarts\n    % 运行多目标优化\n    [x, fval] = gamultiobj(@objective_function, 6, [], [], [],\
+    \ [], ...\n        deg2rad(DH_params(:,4)), deg2rad(DH_params(:,5)), @constraint_function, opts);\n\
+    \n    % 存储结果\n    bestSolutions{start} = x;\n    bestFvals{start} = fval;\n    \n    % 可视化每次运行的结果\n\
+    \    visualize_results(fval);\n    disp_results(x, fval);\nend\n\n% 比较所有结果，找到全局最优解\nglobalBestFval\
+    \ = [inf, inf];\nglobalBestSolution = [];\n\nfor i = 1:numStarts\n    % 找到最小误差的解\n    [minError, idx]\
+    \ = min(bestFvals{i}(:,1));\n    if minError < globalBestFval(1) || (minError == globalBestFval(1)\
+    \ && bestFvals{i}(idx,2) < globalBestFval(2))\n        globalBestFval = bestFvals{i}(idx,:);\n   \
+    \     globalBestSolution = bestSolutions{i}(idx,:);\n    end\nend\n\n% 显示全局最优解\ndisp('全局最优解 - 关节角度\
+    \ (度):');\ndisp(array2table(rad2deg(globalBestSolution), 'VariableNames', {'Joint1', 'Joint2', 'Joint3',\
+    \ 'Joint4', 'Joint5', 'Joint6'}));\ndisp('全局最优解 - 目标函数值:');\ndisp(array2table(globalBestFval, 'VariableNames',\
+    \ {'EndEffectorError_mm_', 'EnergyConsumption_J_'}));\n\n\n% 目标函数：最小化末端误差和能耗\nfunction f = objective_function(theta)\n\
+    \    global target_pos joint_inertia joint_avg_speed;\n    [end_pos, ~] = forward_kinematics(theta);\n\
+    \    f(1) = norm(end_pos - target_pos);  % 末端误差\n    \n    mass = 5; g = 9.81;  % 质量和重力加速度\n    gravitational_energy\
+    \ = sum(mass * g * forward_kinematics(theta));  % 重力势能\n    \n    f(2) = sum(joint_inertia .* (joint_avg_speed\
+    \ .* theta).^2) + gravitational_energy;  % 总能耗\nend\n\n% 约束函数：限制末端误差不超过200mm\nfunction [c, ceq] =\
+    \ constraint_function(theta)\n    global target_pos;\n    [end_pos, ~] = forward_kinematics(theta);\n\
+    \    c = norm(end_pos - target_pos) - 200;\n    ceq = [];\nend\n\n% 正向运动学计算\nfunction [end_pos, T]\
+    \ = forward_kinematics(theta)\n    global DH_params;\n    T = eye(4);\n    for i = 1:6\n        T\
+    \ = T * dh_matrix(DH_params(i,:), theta(i));\n    end\n    end_pos = T(1:3,4);\nend\n\n% DH矩阵计算\n\
+    function T = dh_matrix(params, theta)\n    a = params(1); alpha = deg2rad(params(2)); d = params(3);\n\
+    \    T = [\n        cos(theta), -sin(theta)*cos(alpha),  sin(theta)*sin(alpha), a*cos(theta);\n  \
+    \      sin(theta),  cos(theta)*cos(alpha), -cos(theta)*sin(alpha), a*sin(theta);\n        0,     \
+    \      sin(alpha),             cos(alpha),            d;\n        0,           0,                \
+    \      0,                     1\n    ];\nend\n\n% 更新 visualize_results 和 disp_results 函数\nfunction\
+    \ visualize_results(fval)\n    figure('Name', 'Pareto Fronts', 'NumberTitle', 'off');\n    scatter(fval(:,1),\
+    \ fval(:,2), 'filled');\n    xlabel('End Effector Error (mm)');\n    ylabel('Energy Consumption (J)');\n\
+    \    title('Pareto Fronts');\n    grid on;\nend\n\nfunction disp_results(x, fval)\n    % 显示最高能耗点，最低误差点，以及均衡点相应的角度及数值\n\
+    \    [minError, minErrorIdx] = min(fval(:,1));\n    [maxEnergy, maxEnergyIdx] = max(fval(:,2));\n\
+    \    \n    disp('最高能耗点 - 关节角度 (度):');\n    disp(array2table(rad2deg(x(maxEnergyIdx,:)), 'VariableNames',\
+    \ {'Joint1', 'Joint2', 'Joint3', 'Joint4', 'Joint5', 'Joint6'}));\n    disp('最高能耗点 - 目标函数值:');\n \
+    \   disp(array2table([minError, fval(maxEnergyIdx,2)], 'VariableNames', {'EndEffectorError_mm_', 'EnergyConsumption_J_'}));\n\
+    \n    disp('最低误差点 - 关节角度 (度):');\n    disp(array2table(rad2deg(x(minErrorIdx,:)), 'VariableNames',\
+    \ {'Joint1', 'Joint2', 'Joint3', 'Joint4', 'Joint5', 'Joint6'}));\n    disp('最低误差点 - 目标函数值:');\n \
+    \   disp(array2table([minError, fval(maxEnergyIdx,2)], 'VariableNames', {'EndEffectorError_mm_', 'EnergyConsumption_J_'}));\n\
+    \n    % 找到能量和误差均衡的点\n    balancedIdx = find(fval(:,1) <= 1.1 * minError\n修改代码去bug"
+  expected:
+    check: judge
+- id: 1046acaadc5447c5
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: |-
+    .设无向树有8片树叶,1个度为4的分支点,其余的分支点的度为3,则树的结点
+    数为
+  expected:
+    check: judge

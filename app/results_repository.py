@@ -49,6 +49,12 @@ class ResultsRepository(Protocol):
         output_tokens: int,
         cost: Decimal,
         prompt_style: Optional[str] = None,
+        sample_idx: int = 0,
+        resp_style_headers: Optional[int] = None,
+        resp_style_bold: Optional[int] = None,
+        resp_style_ordered: Optional[int] = None,
+        resp_style_unordered: Optional[int] = None,
+        resp_style_code_blocks: Optional[int] = None,
     ) -> int: ...
 
     def finalize_run(self, run_id: int) -> None: ...
@@ -114,6 +120,12 @@ class PostgresResultsRepository:
         output_tokens: int,
         cost: Decimal,
         prompt_style: Optional[str] = None,
+        sample_idx: int = 0,
+        resp_style_headers: Optional[int] = None,
+        resp_style_bold: Optional[int] = None,
+        resp_style_ordered: Optional[int] = None,
+        resp_style_unordered: Optional[int] = None,
+        resp_style_code_blocks: Optional[int] = None,
     ) -> int:
         with self.conn.cursor() as cur:
             cur.execute(
@@ -121,8 +133,11 @@ class PostgresResultsRepository:
                 INSERT INTO results
                     (run_id, model_id, case_id, question, response,
                      latency_ms, input_tokens, output_tokens, cost,
-                     prompt_style)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     prompt_style, sample_idx,
+                     resp_style_headers, resp_style_bold, resp_style_ordered,
+                     resp_style_unordered, resp_style_code_blocks)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -136,6 +151,12 @@ class PostgresResultsRepository:
                     output_tokens,
                     cost,
                     prompt_style,
+                    sample_idx,
+                    resp_style_headers,
+                    resp_style_bold,
+                    resp_style_ordered,
+                    resp_style_unordered,
+                    resp_style_code_blocks,
                 ),
             )
             returned_id = cur.fetchone()[0]

@@ -1,0 +1,20 @@
+arena-hard-auto
+===============
+
+The prompts in evaluator/datasets/arena_hard_v2_subset.yaml are imported
+verbatim from the arena-hard-auto benchmark and are used under the Apache
+License, Version 2.0.
+
+  Source : https://github.com/lmarena/arena-hard-auto
+  File   : data/arena-hard-v2.0/question.jsonl
+  Ref    : 196f6b826783b3da7310e361a805fa36f0be83f3 (main)
+  License: Apache-2.0 — https://github.com/lmarena/arena-hard-auto/blob/main/LICENSE
+
+Each imported case preserves its upstream `uid` as the LLMeter case `id` for
+traceability. Only a balanced subset of prompts is included; no upstream source
+code is vendored. Regenerate via:
+
+  python scripts/import_arena_hard.py --source <path-to-question.jsonl>
+
+Copyright belongs to the arena-hard-auto authors (LMArena). This NOTICE is
+provided to satisfy the attribution terms of the Apache-2.0 license.

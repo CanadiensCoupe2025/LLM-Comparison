@@ -108,6 +108,12 @@ def test_insert_result_writes_all_fields_in_order_and_commits():
         output_tokens=8,
         cost=Decimal("0.000123"),
         prompt_style="few-shot",
+        sample_idx=2,
+        resp_style_headers=1,
+        resp_style_bold=2,
+        resp_style_ordered=3,
+        resp_style_unordered=4,
+        resp_style_code_blocks=5,
     )
 
     assert result_id == 123
@@ -117,9 +123,11 @@ def test_insert_result_writes_all_fields_in_order_and_commits():
     # Column list must be in the order the runner expects.
     assert "run_id, model_id, case_id, question, response," in sql
     assert "latency_ms, input_tokens, output_tokens, cost" in sql
-    assert "prompt_style" in sql
+    assert "prompt_style, sample_idx" in sql
+    assert "resp_style_headers, resp_style_bold, resp_style_ordered" in sql
     assert params == (
-        10, 3, "canary-1", "hello?", "hello", 420, 12, 8, Decimal("0.000123"), "few-shot",
+        10, 3, "canary-1", "hello?", "hello", 420, 12, 8, Decimal("0.000123"),
+        "few-shot", 2, 1, 2, 3, 4, 5,
     )
     conn.commit.assert_called_once()
 
@@ -132,7 +140,10 @@ def test_insert_result_defaults_prompt_style_to_none():
         latency_ms=1, input_tokens=1, output_tokens=1, cost=Decimal("0"),
     )
     _, params = cur.execute.call_args.args
-    assert params[-1] is None  # prompt_style
+    # The 5 trailing resp_style_* params default to None (not extracted here).
+    assert params[-5:] == (None, None, None, None, None)
+    assert params[-6] == 0       # sample_idx defaults to 0 (single-shot)
+    assert params[-7] is None    # prompt_style
 
 
 # ---------------------------------------------------------------------------
