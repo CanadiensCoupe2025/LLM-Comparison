@@ -221,3 +221,9 @@ __marimo__/
 .env.*
 !.env.example
 .DS_Store
+
+# Local DB snapshot (pg_dump safety net — not source)
+llm_eval_backup.sql
+
+# Saved eval-run backups (data, not source)
+eval_backups/
