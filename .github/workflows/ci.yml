@@ -1,0 +1,82 @@
+name: CI
+
+# SCRUM-25 — runs on every PR to main: lint → unit tests → real (cheap) eval
+# regression gate. The eval-gate job fails the pipeline if any model's mean
+# judge score drops below 3.5/5.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: Lint + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check app tests
+      - name: Unit tests + coverage gate (>= 70%)
+        run: pytest --cov=app --cov-report=term-missing --cov-fail-under=70
+
+  eval-gate:
+    name: Eval regression gate
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: llm
+          POSTGRES_PASSWORD: llm
+          POSTGRES_DB: llm_eval
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U llm -d llm_eval"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://llm:llm@localhost:5432/llm_eval
+      # Injected from GitHub Secrets (DoD #4). Only these three are needed:
+      # the two cheap candidate models + the Gemini judge.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Apply schema + migrations + seed
+        env:
+          PGPASSWORD: llm
+        run: |
+          set -euo pipefail
+          psql -h localhost -U llm -d llm_eval -v ON_ERROR_STOP=1 -f db/schema.sql
+          for f in db/0*.sql; do
+            echo "applying $f"
+            psql -h localhost -U llm -d llm_eval -v ON_ERROR_STOP=1 -f "$f"
+          done
+          psql -h localhost -U llm -d llm_eval -v ON_ERROR_STOP=1 -f db/seed.sql
+      - name: Sync versioned prompts
+        run: python -m app.prompts.cli sync
+      - name: Eval regression gate (real, cheap)
+        # 1 case x 2 low-cost models x 1 sample + Gemini judge ~= a few cents.
+        # Exits 5 (pipeline fails) if any model's mean judge score < 3.5/5.
+        run: |
+          python -m app.runner \
+            --dataset evaluator/datasets/sprint1_smoke.yaml \
+            --models claude-haiku-4-5 deepseek-v4-flash \
+            --judge --samples 1 --temperature 0 --fail-under 3.5

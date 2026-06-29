@@ -2,6 +2,20 @@
 testpaths = ["tests"]
 pythonpath = ["."]
 
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# Conservative on purpose (SCRUM-25): catch real defects (pyflakes F) and import
+# order (I) plus pycodestyle errors (E), without forcing a wholesale reformat of
+# the existing tree. Widen later if desired.
+select = ["E", "F", "I"]
+# Pre-existing style we don't want the gate to churn on:
+#   E501 line-length — pervasive in the current tree; cosmetic.
+#   E731 lambda assignment — used deliberately in tests/fakes.
+ignore = ["E501", "E731"]
+
 [tool.coverage.run]
 source = ["app"]
 branch = false

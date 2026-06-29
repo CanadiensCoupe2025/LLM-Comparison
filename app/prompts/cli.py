@@ -17,9 +17,9 @@ from pathlib import Path
 import psycopg
 
 from app.logging_setup import configure_logging
-from .repository import PostgresPromptRepository
-from .sync import sync_prompts, SyncAction
 
+from .repository import PostgresPromptRepository
+from .sync import SyncAction, sync_prompts
 
 DEFAULT_TEMPLATES_DIR = Path(__file__).parent / "templates"
 

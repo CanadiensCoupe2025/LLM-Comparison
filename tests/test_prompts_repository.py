@@ -11,7 +11,6 @@ from unittest.mock import MagicMock
 
 from app.prompts.repository import PostgresPromptRepository, PromptRow
 
-
 _NOW = datetime(2026, 6, 15, 12, 0, 0)
 
 

@@ -13,7 +13,6 @@ from app.decision_scoring import (
     rank_models,
 )
 
-
 # --- normalize_metric ---------------------------------------------------------
 
 def test_normalize_higher_better_maps_max_to_one():

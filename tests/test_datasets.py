@@ -6,7 +6,6 @@ import pytest
 
 from app.datasets import DatasetError, load_dataset
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REAL_DATASETS = REPO_ROOT / "evaluator" / "datasets"
 
