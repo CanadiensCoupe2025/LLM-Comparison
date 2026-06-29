@@ -1,0 +1,250 @@
+{
+  "uid": "llm-final-decision",
+  "title": "LLM Final Decision",
+  "tags": ["llmeter", "decision", "recommendation"],
+  "schemaVersion": 39,
+  "version": 2,
+  "editable": true,
+  "time": { "from": "now-90d", "to": "now" },
+  "timezone": "browser",
+  "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "profile",
+        "label": "Profil d'usage",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+        "query": "SELECT DISTINCT profile FROM decision_by_profile ORDER BY 1",
+        "refresh": 2,
+        "includeAll": false,
+        "multi": false,
+        "current": { "text": "equilibre", "value": "equilibre" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Modèle recommandé — profil « $profile »",
+      "description": "Modèle retenu pour le profil sélectionné. Le choix est déterministe (score pondéré sur les métriques du profil) ; le juge LLM rédige la justification. Source: vue decision_by_profile.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 5, "w": 10, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT recommended_model FROM decision_by_profile WHERE profile = '$profile';"
+        }
+      ],
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "recommended_model", "values": false },
+        "orientation": "horizontal",
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Confiance",
+      "description": "Niveau de confiance, dérivé de la marge entre le meilleur modèle et le suivant (top1 − top2). Source: vue decision_by_profile.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 5, "w": 7, "x": 10, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT confidence FROM decision_by_profile WHERE profile = '$profile';"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "mappings": [
+            { "type": "value", "options": {
+              "élevée": { "color": "green", "index": 0 },
+              "moyenne": { "color": "orange", "index": 1 },
+              "faible": { "color": "red", "index": 2 }
+            } }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "confidence", "values": false },
+        "orientation": "horizontal",
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Score pondéré du gagnant",
+      "description": "Score pondéré normalisé [0,1] du modèle retenu pour ce profil (1 = profil parfaitement satisfait). Source: vue decision_by_profile.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 5, "w": 7, "x": 17, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT top_score FROM decision_by_profile WHERE profile = '$profile';"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 3, "min": 0, "max": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [ { "value": null, "color": "red" }, { "value": 0.5, "color": "orange" }, { "value": 0.7, "color": "green" } ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 4,
+      "type": "barchart",
+      "title": "Classement pondéré des modèles — profil « $profile »",
+      "description": "Score pondéré [0,1] de chaque modèle pour ce profil (le pick = la barre la plus haute). Déplie le tableau weighted_scores stocké avec la décision. Source: vue decision_by_profile.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT elem->>'model' AS modèle, (elem->>'score')::float AS score FROM decision_by_profile, jsonb_array_elements(weighted_scores) elem WHERE profile = '$profile' ORDER BY score DESC;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 1, "decimals": 3,
+          "color": { "mode": "continuous-GrYlRd" },
+          "custom": { "lineWidth": 1, "fillOpacity": 85, "axisLabel": "score pondéré [0,1]", "gradientMode": "hue" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "modèle",
+        "showValue": "always",
+        "legend": { "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "desc" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Justification du juge — profil « $profile »",
+      "description": "Métriques déterminantes pour ce profil, compromis arbitrés (qualité vs efficacité tokens vs latence) et raisonnement chiffré. Source: vue decision_by_profile.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT determinant_metrics AS \"métriques déterminantes\", tradeoffs AS \"compromis arbitrés\", reasoning AS \"justification\" FROM decision_by_profile WHERE profile = '$profile';"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left", "cellOptions": { "type": "auto", "wrapText": true }, "inspect": true, "filterable": false } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "métriques déterminantes" }, "properties": [{ "id": "custom.width", "value": 220 }] }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "lg" }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Recommandation par profil d'usage (vue d'ensemble)",
+      "description": "Modèle recommandé pour chaque profil (équilibre, étudiant, rapide, économie…), avec confiance, score pondéré et les métriques clés du gagnant. Source: vue decision_by_profile.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT profile AS profil, recommended_model AS \"modèle recommandé\", confidence AS confiance, top_score AS \"score\", mean_judge_score AS \"qualité (0-5)\", efficiency AS \"efficacité (pts/1k tok)\", avg_latency_ms AS \"latence ms\", reasoning AS justification FROM decision_by_profile ORDER BY profile;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left", "cellOptions": { "type": "auto", "wrapText": true }, "filterable": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "profil" }, "properties": [{ "id": "custom.width", "value": 110 }] },
+          { "matcher": { "id": "byName", "options": "modèle recommandé" }, "properties": [{ "id": "custom.width", "value": 170 }] },
+          { "matcher": { "id": "byName", "options": "confiance" }, "properties": [{ "id": "custom.width", "value": 100 }] },
+          { "matcher": { "id": "byName", "options": "score" }, "properties": [{ "id": "custom.width", "value": 80 }, { "id": "decimals", "value": 3 }] },
+          {
+            "matcher": { "id": "byName", "options": "qualité (0-5)" },
+            "properties": [
+              { "id": "custom.width", "value": 100 },
+              { "id": "min", "value": 0 }, { "id": "max", "value": 5 }, { "id": "decimals", "value": 1 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "value": null, "color": "red" }, { "value": 3.5, "color": "orange" }, { "value": 4.2, "color": "green" } ] } }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "justification" }, "properties": [{ "id": "custom.width", "value": 440 }] }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "lg", "sortBy": [{ "displayName": "profil", "desc": false }] }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Comparatif complet par modèle (données ayant servi à la décision)",
+      "description": "Toutes les métriques agrégées par modèle (vue model_decision_metrics) — le tableau exact soumis au scoring. Trié par efficacité décroissante.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 23 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT model AS modèle, n_judged AS \"n jugés\", mean_judge_score AS \"qualité (0-5)\", stddev_judge_score AS \"écart-type\", efficiency AS \"efficacité (pts/1k tok)\", avg_total_tokens AS \"tokens moy\", avg_latency_ms AS \"latence ms\", ctx_pct AS \"% contexte\", avg_cost AS \"coût USD (dérivé)\" FROM model_decision_metrics ORDER BY efficiency DESC NULLS LAST;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "center", "filterable": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "modèle" }, "properties": [{ "id": "custom.width", "value": 180 }, { "id": "custom.align", "value": "left" }] },
+          {
+            "matcher": { "id": "byName", "options": "qualité (0-5)" },
+            "properties": [
+              { "id": "min", "value": 0 }, { "id": "max", "value": 5 }, { "id": "decimals", "value": 1 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "value": null, "color": "red" }, { "value": 3.5, "color": "orange" }, { "value": 4.2, "color": "green" } ] } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "efficacité (pts/1k tok)" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "value": null, "color": "red" }, { "value": 0, "color": "orange" }, { "value": 1, "color": "green" } ] } }
+            ]
+          }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [{ "displayName": "efficacité (pts/1k tok)", "desc": true }] }
+    }
+  ]
+}

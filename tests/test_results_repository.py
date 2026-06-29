@@ -185,3 +185,97 @@ def test_finalize_run_updates_finished_at_and_commits():
     assert "finished_at = NOW()" in sql
     assert params == (99,)
     conn.commit.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Final decision (SCRUM-38): find / insert / latest / metrics
+# ---------------------------------------------------------------------------
+
+
+def _decision_db_row():
+    # Column order must match PostgresResultsRepository._DECISION_COLS.
+    return (
+        7,
+        "claude-haiku-4-5",
+        "élevée",
+        ["efficiency"],
+        "qualité ~égale, moins de tokens",
+        "haiku rend plus de qualité par token.",
+        3,
+        "abc123",
+        "etudiant",
+        [{"model": "claude-haiku-4-5", "score": 0.82}],
+        datetime(2026, 6, 25, 10, 0, 0),
+    )
+
+
+def test_find_decision_uses_not_distinct_from_for_null_keys():
+    """The cache key must match NULL prompt_id/profile (plain `=` never matches NULL)."""
+    conn, cur = _mock_conn(fetchone_value=_decision_db_row())
+
+    row = PostgresResultsRepository(conn).find_decision(
+        input_hash="abc123", prompt_id=None, profile="etudiant"
+    )
+
+    sql, params = cur.execute.call_args.args
+    assert "FROM decisions" in sql
+    assert "input_hash = %s" in sql
+    assert "prompt_id IS NOT DISTINCT FROM %s" in sql
+    assert "profile IS NOT DISTINCT FROM %s" in sql
+    assert params == ("abc123", None, "etudiant")
+    assert row.recommended_model == "claude-haiku-4-5"
+    assert row.profile == "etudiant"
+    assert row.weighted_scores[0]["score"] == 0.82
+
+
+def test_find_decision_returns_none_when_absent():
+    conn, _ = _mock_conn(fetchone_value=None)
+    assert (
+        PostgresResultsRepository(conn).find_decision(
+            input_hash="x", prompt_id=1, profile="equilibre"
+        )
+        is None
+    )
+
+
+def test_insert_decision_wraps_json_columns_and_commits():
+    from psycopg.types.json import Jsonb
+
+    conn, cur = _mock_conn(fetchone_value=_decision_db_row())
+
+    PostgresResultsRepository(conn).insert_decision(
+        recommended_model="claude-haiku-4-5",
+        confidence="élevée",
+        determinant_metrics=["efficiency"],
+        tradeoffs="moins de tokens",
+        reasoning="x",
+        prompt_id=3,
+        input_hash="abc123",
+        input_snapshot=[{"model": "gpt-5"}],
+        profile="etudiant",
+        weighted_scores=[{"model": "claude-haiku-4-5", "score": 0.82}],
+    )
+
+    sql, params = cur.execute.call_args.args
+    assert "INSERT INTO decisions" in sql
+    assert "profile" in sql and "weighted_scores" in sql
+    # JSONB columns are wrapped so psycopg adapts list/dict correctly
+    assert isinstance(params[2], Jsonb)   # determinant_metrics
+    assert isinstance(params[7], Jsonb)   # input_snapshot
+    assert isinstance(params[9], Jsonb)   # weighted_scores
+    assert params[8] == "etudiant"        # profile
+    conn.commit.assert_called_once()
+
+
+def test_fetch_decision_metrics_returns_dicts_keyed_by_column():
+    conn, cur = _mock_conn()
+    cur.description = [MagicMock(name="col") for _ in range(2)]
+    cur.description[0].name = "model"
+    cur.description[1].name = "efficiency"
+    cur.fetchall.return_value = [("gpt-5", Decimal("0.8"))]
+
+    rows = PostgresResultsRepository(conn).fetch_decision_metrics()
+
+    sql = cur.execute.call_args.args[0]
+    assert "FROM model_decision_metrics" in sql
+    assert rows == [{"model": "gpt-5", "efficiency": Decimal("0.8")}]
