@@ -34,6 +34,8 @@ from typing import Optional
 import numpy as np
 import psycopg
 
+from app.logging_setup import configure_logging
+
 # Style covariates held at their global mean to compute the adjusted score.
 # Length comes first as log1p(output_tokens); the rest are raw markdown counts.
 FEATURE_NAMES = [
@@ -218,6 +220,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--min-obs", type=int, default=20,
                         help="Refuse to fit below this many observations (default: 20).")
     args = parser.parse_args(argv)
+    configure_logging()
 
     conn = _connect_db()
     try:

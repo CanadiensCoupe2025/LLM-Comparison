@@ -12,6 +12,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from app.logging_setup import get_logger
+
+log = get_logger(__name__)
+
 
 class ApiSurface(str, Enum):
     MESSAGES = "messages"            # Anthropic
@@ -352,4 +356,22 @@ def call_llm(
     except KeyError as e:
         raise UnknownProviderError(f"Unknown provider: {provider!r}") from e
 
-    return adapter.call(spec, prompt, **kwargs)
+    # Never log the prompt or the API key (B13) — only call shape and outcome.
+    try:
+        response = adapter.call(spec, prompt, **kwargs)
+    except Exception:
+        log.exception(
+            "llm call raised", extra={"model": model, "provider": provider}
+        )
+        raise
+    log.info(
+        "llm call ok",
+        extra={
+            "model": model,
+            "provider": provider,
+            "latency_ms": round(response.latency_ms),
+            "tokens_in": response.tokens_in,
+            "tokens_out": response.tokens_out,
+        },
+    )
+    return response

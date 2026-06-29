@@ -18,7 +18,10 @@ from decimal import Decimal
 from typing import Callable, Any
 from app.llm_client import LLMResponse, call_llm
 from pathlib import Path
+from app.logging_setup import get_logger
 from app.prompts.loader import load_prompt
+
+log = get_logger(__name__)
 
 class JudgeParseError(ValueError):
     """Raised when the judge score is not valid, in-range verdict JSON"""
@@ -116,6 +119,14 @@ def judge(
             attempt += 1
             if attempt > max_retries or not _is_retryable(e):
                 raise
+            log.warning(
+                "judge call transient error, retrying (%d/%d): %s: %s",
+                attempt,
+                max_retries,
+                type(e).__name__,
+                e,
+                extra={"model": model},
+            )
             sleep(backoff_base ** attempt)
             continue
         return parse_verdict(response.content)
