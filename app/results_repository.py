@@ -7,8 +7,26 @@ runner depends on, and a `Postgres…` implementation. Tests swap in a
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
+
+from psycopg.types.json import Jsonb
+
+
+@dataclass(frozen=True)
+class DecisionRow:
+    id: int
+    recommended_model: str
+    confidence: str
+    determinant_metrics: list[str]
+    tradeoffs: Optional[str]
+    reasoning: str
+    prompt_id: Optional[int]
+    input_hash: str
+    profile: Optional[str]
+    weighted_scores: Optional[list]
+    created_at: datetime
 
 
 @dataclass(frozen=True)
@@ -58,6 +76,29 @@ class ResultsRepository(Protocol):
     ) -> int: ...
 
     def finalize_run(self, run_id: int) -> None: ...
+
+    def find_decision(
+        self, *, input_hash: str, prompt_id: Optional[int], profile: Optional[str]
+    ) -> Optional[DecisionRow]: ...
+
+    def insert_decision(
+        self,
+        *,
+        recommended_model: str,
+        confidence: str,
+        determinant_metrics: list[str],
+        tradeoffs: Optional[str],
+        reasoning: str,
+        prompt_id: Optional[int],
+        input_hash: str,
+        input_snapshot: Any,
+        profile: Optional[str] = None,
+        weighted_scores: Optional[list] = None,
+    ) -> DecisionRow: ...
+
+    def latest_decision(self) -> Optional[DecisionRow]: ...
+
+    def fetch_decision_metrics(self) -> list[dict]: ...
 
 
 class PostgresResultsRepository:
@@ -188,3 +229,113 @@ class PostgresResultsRepository:
                 (run_id,),
             )
         self.conn.commit()
+
+    # --- Final decision (SCRUM-38) -------------------------------------
+
+    # `prompt_id IS NOT DISTINCT FROM %s` so a NULL prompt_id matches a NULL
+    # lookup (plain `=` would never match NULLs) — keeps the cache correct even
+    # if the prompt was never synced to the `prompts` table.
+    # All SELECTs share this column list so DecisionRow mapping stays in sync.
+    _DECISION_COLS = (
+        "id, recommended_model, confidence, determinant_metrics, tradeoffs, "
+        "reasoning, prompt_id, input_hash, profile, weighted_scores, created_at"
+    )
+
+    def find_decision(
+        self, *, input_hash: str, prompt_id: Optional[int], profile: Optional[str]
+    ) -> Optional[DecisionRow]:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT {self._DECISION_COLS}
+                FROM decisions
+                WHERE input_hash = %s
+                  AND prompt_id IS NOT DISTINCT FROM %s
+                  AND profile IS NOT DISTINCT FROM %s
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                (input_hash, prompt_id, profile),
+            )
+            return self._decision_row(cur.fetchone())
+
+    def insert_decision(
+        self,
+        *,
+        recommended_model: str,
+        confidence: str,
+        determinant_metrics: list[str],
+        tradeoffs: Optional[str],
+        reasoning: str,
+        prompt_id: Optional[int],
+        input_hash: str,
+        input_snapshot: Any,
+        profile: Optional[str] = None,
+        weighted_scores: Optional[list] = None,
+    ) -> DecisionRow:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                f"""
+                INSERT INTO decisions
+                    (recommended_model, confidence, determinant_metrics,
+                     tradeoffs, reasoning, prompt_id, input_hash, input_snapshot,
+                     profile, weighted_scores)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING {self._DECISION_COLS}
+                """,
+                (
+                    recommended_model,
+                    confidence,
+                    Jsonb(determinant_metrics),
+                    tradeoffs,
+                    reasoning,
+                    prompt_id,
+                    input_hash,
+                    Jsonb(input_snapshot),
+                    profile,
+                    Jsonb(weighted_scores) if weighted_scores is not None else None,
+                ),
+            )
+            row = self._decision_row(cur.fetchone())
+        self.conn.commit()
+        return row  # type: ignore[return-value]
+
+    def latest_decision(self) -> Optional[DecisionRow]:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT {self._DECISION_COLS}
+                FROM decisions
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """
+            )
+            return self._decision_row(cur.fetchone())
+
+    def fetch_decision_metrics(self) -> list[dict]:
+        """Read the `model_decision_metrics` view as a list of plain dicts.
+
+        Decimals are kept as-is; app/decision.py canonicalises them for hashing.
+        """
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT * FROM model_decision_metrics ORDER BY model")
+            cols = [c.name for c in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    @staticmethod
+    def _decision_row(r) -> Optional[DecisionRow]:
+        if r is None:
+            return None
+        return DecisionRow(
+            id=r[0],
+            recommended_model=r[1],
+            confidence=r[2],
+            determinant_metrics=r[3],
+            tradeoffs=r[4],
+            reasoning=r[5],
+            prompt_id=r[6],
+            input_hash=r[7],
+            profile=r[8],
+            weighted_scores=r[9],
+            created_at=r[10],
+        )

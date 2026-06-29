@@ -1,0 +1,48 @@
+name: decision_profiles
+version: 1.0
+# Usage profiles for the final model recommendation (SCRUM-38).
+#
+# Each profile assigns a NUMERIC weight (>= 0) to the metrics that matter for a
+# given way of using the platform. A deterministic weighted score (see
+# app/decision_scoring.py) ranks the models per profile; the judge LLM only
+# writes the justification. Weights need not sum to 1 — they are normalised by
+# their sum at scoring time. Set a weight to 0 (or omit the metric) to ignore it.
+#
+# Allowed metric keys (columns of view model_decision_metrics):
+#   mean_judge_score   (higher better)  — quality, 0–5
+#   efficiency         (higher better)  — quality points per 1k tokens
+#   avg_total_tokens   (lower better)   — token cost per answer
+#   avg_latency_ms     (lower better)   — speed
+#   ctx_pct            (lower better)   — context window pressure
+#   avg_cost           (lower better)   — USD, DERIVED reference (keep small)
+#   stddev_judge_score (lower better)   — answer-to-answer stability
+#
+# `equilibre` is the DEFAULT and stands in for SCRUM-38's single recommendation.
+profiles:
+  equilibre:
+    description: "Compromis général qualité / efficacité tokens / latence."
+    weights:
+      mean_judge_score: 0.4
+      efficiency: 0.3
+      avg_latency_ms: 0.2
+      avg_total_tokens: 0.1
+
+  etudiant:
+    description: "Meilleures réponses au plus bas coût ; la vitesse importe peu."
+    weights:
+      mean_judge_score: 0.5
+      efficiency: 0.3
+      avg_cost: 0.2
+
+  rapide:
+    description: "Recherche occasionnelle : la rapidité prime, qualité correcte suffit."
+    weights:
+      avg_latency_ms: 0.8
+      mean_judge_score: 0.2
+
+  economie:
+    description: "Minimiser les tokens consommés avant tout."
+    weights:
+      avg_total_tokens: 0.6
+      efficiency: 0.3
+      mean_judge_score: 0.1

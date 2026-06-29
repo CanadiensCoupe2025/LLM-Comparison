@@ -27,6 +27,10 @@ class ModelSpec:
     surface: ApiSurface
     supports_temperature: bool
     returns_reasoning: bool
+    # Total context window (tokens). Lets the final-decision metrics express
+    # average prompt size as a percentage of capacity (SCRUM-38). Mirrored in
+    # the `models` table by migration 014 so SQL views can compute the %.
+    context_window: int
 
 
 @dataclass
@@ -42,31 +46,31 @@ class LLMResponse:
 
 MODEL_REGISTRY: dict[str, ModelSpec] = {
     "claude-sonnet-4-6": ModelSpec(
-        "anthropic", "claude-sonnet-4-6", ApiSurface.MESSAGES, True, False
+        "anthropic", "claude-sonnet-4-6", ApiSurface.MESSAGES, True, False, 200_000
     ),
     "claude-opus-4-8": ModelSpec(
-        "anthropic", "claude-opus-4-8", ApiSurface.MESSAGES, False, False
+        "anthropic", "claude-opus-4-8", ApiSurface.MESSAGES, False, False, 200_000
     ),
     "claude-haiku-4-5": ModelSpec(
-        "anthropic", "claude-haiku-4-5-20251001", ApiSurface.MESSAGES, True, False
+        "anthropic", "claude-haiku-4-5-20251001", ApiSurface.MESSAGES, True, False, 200_000
     ),
     "gpt-5": ModelSpec(
-        "openai", "gpt-5-2025-08-07", ApiSurface.RESPONSES, False, True
+        "openai", "gpt-5-2025-08-07", ApiSurface.RESPONSES, False, True, 400_000
     ),
     "o3": ModelSpec(
-        "openai", "o3-2025-04-16", ApiSurface.RESPONSES, False, True
+        "openai", "o3-2025-04-16", ApiSurface.RESPONSES, False, True, 200_000
     ),
     "deepseek-v4-flash": ModelSpec(
-        "deepseek", "deepseek-v4-flash", ApiSurface.CHAT_COMPLETIONS, True, False
+        "deepseek", "deepseek-v4-flash", ApiSurface.CHAT_COMPLETIONS, True, False, 128_000
     ),
     "deepseek-v4-pro": ModelSpec(
-        "deepseek", "deepseek-v4-pro", ApiSurface.CHAT_COMPLETIONS, True, True
+        "deepseek", "deepseek-v4-pro", ApiSurface.CHAT_COMPLETIONS, True, True, 128_000
     ),
     "gemini-2.5-pro": ModelSpec(
-        "gemini","gemini-2.5-pro", ApiSurface.GEMINI, True, False
+        "gemini","gemini-2.5-pro", ApiSurface.GEMINI, True, False, 1_048_576
     ),
     "gemini-2.5-flash": ModelSpec(
-        "gemini", "gemini-2.5-flash", ApiSurface.GEMINI, True, False
+        "gemini", "gemini-2.5-flash", ApiSurface.GEMINI, True, False, 1_048_576
     ),
 }
 
