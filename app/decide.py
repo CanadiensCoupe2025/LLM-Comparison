@@ -35,6 +35,7 @@ from app.decision import (
     load_decision_prompt,
     prompt_hash,
 )
+from app.logging_setup import configure_logging, get_logger
 from app.profiles import DEFAULT_PROFILE, Profile, get_profile, load_profiles
 from app.prompts.repository import PostgresPromptRepository
 from app.prompts.sync import sync_prompts
@@ -46,6 +47,8 @@ EXIT_NO_DATA = 4
 
 TEMPLATES_DIR = Path(__file__).parent / "prompts" / "templates"
 PROMPT_NAME = "final_decision"
+
+log = get_logger(__name__)
 
 
 def _connect_db():
@@ -97,6 +100,14 @@ def _decide_one(
             return
 
     decision = decide(metrics, profile, rubric=rubric, model=judge_model)
+    log.info(
+        "decision computed",
+        extra={
+            "model": decision.recommended_model,
+            "profile": profile.name,
+            "confidence": decision.confidence,
+        },
+    )
     repo.insert_decision(
         recommended_model=decision.recommended_model,
         confidence=decision.confidence,
@@ -138,6 +149,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Judge model used to write the justification (default: gemini-2.5-pro).",
     )
     args = parser.parse_args(argv)
+    configure_logging()
 
     # Resolve the requested profile(s) before opening the DB so a typo fails fast.
     try:
@@ -146,7 +158,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         else:
             profiles = [get_profile(args.profile)]
     except Exception as e:  # ProfileError, file issues
-        print(f"Profil invalide : {e}", file=sys.stderr)
+        log.error("invalid profile: %s", e)
         return EXIT_CONFIG
 
     conn = _connect_db()
@@ -156,10 +168,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         metrics = repo.fetch_decision_metrics()
         if not metrics:
-            print(
-                "Aucun résultat jugé dans `model_decision_metrics`. "
-                "Lance d'abord un run avec --judge.",
-                file=sys.stderr,
+            log.error(
+                "no judged results in `model_decision_metrics` — "
+                "run with --judge first."
             )
             return EXIT_NO_DATA
 

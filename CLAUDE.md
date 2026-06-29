@@ -99,6 +99,20 @@ docker compose exec postgres psql -U llm -d llm_eval
   AND the profile weights: same data + same weights replays the stored decision;
   editing a weight regenerates it (`--force` to override).
 
+## Logging (SCRUM-32)
+- All Python components emit **structured JSON logs, one line per event**, via
+  `app/logging_setup.py` — no third-party dependency. Each event carries
+  `timestamp` (ISO-8601 UTC), `level`, `logger`, `message`, plus `model` and
+  `run_id`; errors logged with `exc_info`/`logger.exception` include the full
+  stack trace under `exception`.
+- Logs go to **stdout**, which Azure Container Apps ships into Azure Monitor
+  Log Analytics (`ContainerAppConsoleLogs_CL`). The runner's end-of-run summary
+  tables stay as `print()` — that's CLI report output, not log events.
+- Bind context once with `log_context(run_id=…)` (a `contextvars`-backed MDC,
+  à la SLF4J); a per-call `extra={"model": …}` overrides it. Every CLI
+  entrypoint calls `configure_logging()` (idempotent) before doing work.
+- **Never log API keys or prompt/response content** (B13) — only call shape and
+  outcome (model, provider, latency, tokens).
 
 ## Rules
 - Never commit .env

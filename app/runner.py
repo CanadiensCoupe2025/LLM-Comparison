@@ -32,6 +32,7 @@ import psycopg
 from app.judge import judge, to_db_scale
 from app.datasets import Case, Dataset, DatasetError, load_dataset
 from app.llm_client import MODEL_REGISTRY, LLMResponse, call_llm
+from app.logging_setup import configure_logging, get_logger, log_context
 from app.style_features import StyleFeatures, extract_style_features
 from app.prompts.repository import PostgresPromptRepository, PromptRepository
 from app.results_repository import (
@@ -50,6 +51,8 @@ DEFAULT_SAMPLES = 10
 EXIT_OK = 0
 EXIT_CONFIG = 1
 EXIT_PARTIAL_FAILURE = 3
+
+log = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -237,9 +240,12 @@ def execute_run(
                     result = fut.result()
                 except Exception as e:
                     failed += 1
-                    print(
-                        f"  ✗ case={case_id!r} model={model_key!r} → {type(e).__name__}: {e}",
-                        file=sys.stderr,
+                    log.error(
+                        "model call failed: %s: %s",
+                        type(e).__name__,
+                        e,
+                        exc_info=e,
+                        extra={"model": model_key, "run_id": run_id, "case_id": case_id},
                     )
                     continue
 
@@ -295,10 +301,16 @@ def execute_run(
                                 (model_key, result.prompt_style), []
                             ).append(scaled)
                     except Exception as e:
-                        print(
-                            f"  ⚠ judge failed case={case_id!r} model={model_key!r} "
-                            f"→ {type(e).__name__}: {e}",
-                            file=sys.stderr,
+                        log.warning(
+                            "judge failed (judge_score left NULL): %s: %s",
+                            type(e).__name__,
+                            e,
+                            exc_info=e,
+                            extra={
+                                "model": model_key,
+                                "run_id": run_id,
+                                "case_id": case_id,
+                            },
                         )
                     last_judge_at = time.monotonic()
                 inserted += 1
@@ -306,10 +318,19 @@ def execute_run(
                 total_input_tokens += result.response.tokens_in
                 total_output_tokens += result.response.tokens_out
                 latencies_ms.append(latency_ms)
-                print(
-                    f"  ✓ case={case_id!r} model={model_key!r} "
-                    f"tokens={result.response.tokens_in}/{result.response.tokens_out} "
-                    f"cost=${cost:.6f}"
+                log.info(
+                    "result persisted",
+                    extra={
+                        "model": model_key,
+                        "run_id": run_id,
+                        "case_id": case_id,
+                        "result_id": result_id,
+                        "sample_idx": result.sample_idx,
+                        "tokens_in": result.response.tokens_in,
+                        "tokens_out": result.response.tokens_out,
+                        "latency_ms": latency_ms,
+                        "cost_usd": float(cost),
+                    },
                 )
     finally:
         repo.finalize_run(run_id)
@@ -444,20 +465,19 @@ def _print_variance_summary(outcome: RunOutcome) -> None:
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = _parse_args(argv)
+    configure_logging()
 
     try:
         dataset = load_dataset(args.dataset)
     except DatasetError as e:
-        print(f"error: {e}", file=sys.stderr)
+        log.error("dataset failed to load: %s", e)
         return EXIT_CONFIG
 
     # Validate model keys upfront — fail before opening the DB.
     unknown = [k for k in args.models if k not in MODEL_REGISTRY]
     if unknown:
-        print(
-            f"error: unknown model key(s): {unknown}. "
-            f"Known: {sorted(MODEL_REGISTRY)}",
-            file=sys.stderr,
+        log.error(
+            "unknown model key(s): %s. Known: %s", unknown, sorted(MODEL_REGISTRY)
         )
         return EXIT_CONFIG
 
@@ -469,30 +489,46 @@ def main(argv: Optional[list[str]] = None) -> int:
         try:
             model_pairs = resolve_models(args.models, results_repo)
         except (ValueError, ModelNotFoundError) as e:
-            print(f"error: {e}", file=sys.stderr)
+            log.error("model resolution failed: %s", e)
             return EXIT_CONFIG
 
         prompt_id, system_prompt = _load_system_prompt(prompt_repo)
 
         run_id = results_repo.create_run(prompt_id, args.dataset.name)
-        print(
-            f"Run id={run_id}  dataset={dataset.name} v{dataset.version}  "
-            f"cases={len(dataset.cases)}  models={len(model_pairs)}  "
-            f"samples={args.samples}"
-        )
+        with log_context(run_id=run_id):
+            log.info(
+                "run started",
+                extra={
+                    "run_id": run_id,
+                    "dataset": dataset.name,
+                    "dataset_version": dataset.version,
+                    "cases": len(dataset.cases),
+                    "models": len(model_pairs),
+                    "samples": args.samples,
+                },
+            )
 
-        outcome = execute_run(
-            dataset=dataset,
-            model_pairs=model_pairs,
-            system_prompt=system_prompt,
-            run_id=run_id,
-            repo=results_repo,
-            max_workers=args.max_workers,
-            temperature=args.temperature,
-            samples=args.samples,
-            do_judge=args.judge,
-            judge_min_interval=args.judge_min_interval,
-        )
+            outcome = execute_run(
+                dataset=dataset,
+                model_pairs=model_pairs,
+                system_prompt=system_prompt,
+                run_id=run_id,
+                repo=results_repo,
+                max_workers=args.max_workers,
+                temperature=args.temperature,
+                samples=args.samples,
+                do_judge=args.judge,
+                judge_min_interval=args.judge_min_interval,
+            )
+            log.info(
+                "run finished",
+                extra={
+                    "run_id": run_id,
+                    "inserted": outcome.inserted,
+                    "failed": outcome.failed,
+                    "total_cost_usd": float(outcome.total_cost),
+                },
+            )
 
         total = len(dataset.cases) * len(model_pairs) * args.samples
         print(f"\n{outcome.inserted}/{total} results inserted, {outcome.failed} failed.")

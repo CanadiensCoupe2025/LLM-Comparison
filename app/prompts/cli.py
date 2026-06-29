@@ -16,6 +16,7 @@ from pathlib import Path
 
 import psycopg
 
+from app.logging_setup import configure_logging
 from .repository import PostgresPromptRepository
 from .sync import sync_prompts, SyncAction
 
@@ -90,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     hist.set_defaults(func=_cmd_history)
 
     args = parser.parse_args(argv)
+    configure_logging()
     return args.func(args)
 
 
