@@ -121,9 +121,10 @@ docker compose exec postgres psql -U llm -d llm_eval
     so this needs no API keys and no database.
   - **eval-gate** (needs lint-and-test): Postgres 16 service → apply
     `db/schema.sql` + `db/0*.sql` + `db/seed.sql` → `prompts.cli sync` → a real
-    but tiny eval (`sprint1_smoke.yaml` × `claude-haiku-4-5` + `deepseek-v4-flash`,
+    but tiny eval (`sprint1_smoke.yaml` × `claude-haiku-4-5` + `gpt-5`,
     Gemini judge) with `--fail-under 3.5`. API keys come from GitHub Secrets
-    (`ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`).
+    (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`); the job fails
+    fast with an explicit error if any of the three secrets is missing.
 - **Regression gate** = `runner --fail-under SCORE` (requires `--judge`): exits
   code 5 (`EXIT_REGRESSION`, beats the partial-failure code 3) if any model's
   mean judge score is below SCORE on the 0–5 scale. Logic lives in the pure,

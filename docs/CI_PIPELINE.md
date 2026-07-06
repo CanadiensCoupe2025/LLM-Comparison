@@ -141,14 +141,16 @@ YAML prompts have to be synced into the `prompts` table before a run.
 ```bash
 python -m app.runner \
   --dataset evaluator/datasets/sprint1_smoke.yaml \
-  --models claude-haiku-4-5 deepseek-v4-flash \
+  --models claude-haiku-4-5 gpt-5 \
   --judge --samples 1 --temperature 0 --fail-under 3.5
 ```
 
-- **1 case × 2 low-cost models × 1 sample** = 2 model calls + 2 judge calls. The
-  two models (`claude-haiku-4-5`, `deepseek-v4-flash`) are the cheapest seeded
-  models; the judge defaults to `gemini-2.5-pro`. Only **three** secrets are
-  therefore needed (no OpenAI).
+- **1 case × 2 models × 1 sample** = 2 model calls + 2 judge calls. The two
+  models (`claude-haiku-4-5`, `gpt-5`) cover the project's core Claude-vs-OpenAI
+  comparison; the judge defaults to `gemini-2.5-pro`. Only **three** secrets are
+  therefore needed. `gpt-5` ignores `--temperature`
+  (`supports_temperature=False` in the registry); it only applies to
+  `claude-haiku-4-5`.
 - `--judge` scores each answer; `--fail-under 3.5` turns scores into a gate.
 
 ---
@@ -235,7 +237,7 @@ docker compose up -d postgres
 # apply db/schema.sql, db/0*.sql, db/seed.sql via psql, then:
 python -m app.prompts.cli sync
 python -m app.runner --dataset evaluator/datasets/sprint1_smoke.yaml \
-  --models claude-haiku-4-5 deepseek-v4-flash \
+  --models claude-haiku-4-5 gpt-5 \
   --judge --samples 1 --fail-under 3.5
 echo $?     # 0 = pass, 5 = regression
 ```
@@ -248,7 +250,10 @@ satisfy) and confirm the exit code is `5`.
 ## 8. One-time setup for this repo
 
 1. Add repository **Secrets** (Settings → Secrets and variables → Actions):
-   `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`.
+   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. The eval-gate job
+   checks these are non-empty up front and fails with an explicit
+   repo-configuration error if one is missing (an absent secret is otherwise
+   silently injected as an empty string).
 2. (Recommended) Make `lint-and-test` and `eval-gate` **required status checks**
    on `main` (Settings → Branches → branch protection). That is what makes the
    gate actually *block* merge and operationalizes the repo rule.

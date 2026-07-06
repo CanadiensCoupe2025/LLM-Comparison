@@ -47,9 +47,9 @@ jobs:
     env:
       DATABASE_URL: postgresql://llm:llm@localhost:5432/llm_eval
       # Injected from GitHub Secrets (DoD #4). Only these three are needed:
-      # the two cheap candidate models + the Gemini judge.
+      # the two candidate models (Claude vs OpenAI) + the Gemini judge.
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
       - uses: actions/checkout@v4
@@ -72,11 +72,26 @@ jobs:
           psql -h localhost -U llm -d llm_eval -v ON_ERROR_STOP=1 -f db/seed.sql
       - name: Sync versioned prompts
         run: python -m app.prompts.cli sync
+      - name: Check API key secrets are configured
+        # A secret that doesn't exist is injected as an empty string, which
+        # only surfaces later as a MissingApiKeyError stack trace per model
+        # call. Fail fast with an explicit repo-configuration error instead.
+        run: |
+          ok=1
+          for var in ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY; do
+            if [ -z "${!var}" ]; then
+              echo "::error::$var secret is not set (repo Settings → Secrets and variables → Actions)"
+              ok=0
+            fi
+          done
+          [ "$ok" = "1" ]
       - name: Eval regression gate (real, cheap)
-        # 1 case x 2 low-cost models x 1 sample + Gemini judge ~= a few cents.
+        # 1 case x 2 models x 1 sample + Gemini judge ~= a few cents.
         # Exits 5 (pipeline fails) if any model's mean judge score < 3.5/5.
+        # gpt-5 ignores --temperature (supports_temperature=False in the
+        # registry); it only applies to claude-haiku-4-5.
         run: |
           python -m app.runner \
             --dataset evaluator/datasets/sprint1_smoke.yaml \
-            --models claude-haiku-4-5 deepseek-v4-flash \
+            --models claude-haiku-4-5 gpt-5 \
             --judge --samples 1 --temperature 0 --fail-under 3.5
