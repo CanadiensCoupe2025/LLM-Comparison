@@ -14,6 +14,8 @@ Exit codes:
     1  configuration error (env var missing, DB unreachable, system prompt absent)
     2  bad CLI arguments (handled by argparse → exits 2 itself)
     3  the run completed but at least one model call raised
+    5  regression gate tripped: a model's mean judge score fell below
+       --fail-under (CI quality gate, SCRUM-25). Takes precedence over 3.
 """
 from __future__ import annotations
 
@@ -29,11 +31,11 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import psycopg
-from app.judge import judge, to_db_scale
+
 from app.datasets import Case, Dataset, DatasetError, load_dataset
+from app.judge import judge, to_db_scale
 from app.llm_client import MODEL_REGISTRY, LLMResponse, call_llm
 from app.logging_setup import configure_logging, get_logger, log_context
-from app.style_features import StyleFeatures, extract_style_features
 from app.prompts.repository import PostgresPromptRepository, PromptRepository
 from app.results_repository import (
     ModelNotFoundError,
@@ -41,7 +43,7 @@ from app.results_repository import (
     PostgresResultsRepository,
     ResultsRepository,
 )
-
+from app.style_features import StyleFeatures, extract_style_features
 
 SYSTEM_PROMPT_NAME = "eval_system"
 DEFAULT_MAX_WORKERS = 6
@@ -51,6 +53,7 @@ DEFAULT_SAMPLES = 10
 EXIT_OK = 0
 EXIT_CONFIG = 1
 EXIT_PARTIAL_FAILURE = 3
+EXIT_REGRESSION = 5
 
 log = get_logger(__name__)
 
@@ -168,6 +171,24 @@ def resolve_models(
             )
         out.append((key, repo.lookup_model(key)))
     return out
+
+
+def regression_failures(
+    outcome: RunOutcome, fail_under: Optional[float]
+) -> list[tuple[str, float]]:
+    """Models whose mean judge score is below `fail_under` (SCRUM-25 gate).
+
+    Returns `(model_key, mean)` pairs sorted by model_key, or an empty list when
+    the gate is off (`fail_under is None`). Pure — reuses the in-memory
+    `RunOutcome.model_score_stats()`, so it's testable without a DB or network.
+    """
+    if fail_under is None:
+        return []
+    return sorted(
+        (model_key, mean)
+        for model_key, (mean, _stddev, _n) in outcome.model_score_stats().items()
+        if mean < fail_under
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -417,6 +438,15 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         help="Judge each response with Gemini and persist judge_score/judge_reasoning.",
     )
     parser.add_argument(
+        "--fail-under",
+        type=float,
+        default=None,
+        metavar="SCORE",
+        help="Regression gate (SCRUM-25): exit non-zero (code 5) if any model's "
+        "mean judge score is below SCORE on the 0–5 scale. Requires --judge. "
+        "Off by default; CI passes --fail-under 3.5.",
+    )
+    parser.add_argument(
         "--judge-min-interval",
         type=float,
         default=0.0,
@@ -481,6 +511,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         return EXIT_CONFIG
 
+    # The regression gate scores judged answers — without --judge there's nothing
+    # to gate on. Fail fast before spending a single API call.
+    if args.fail_under is not None and not args.judge:
+        log.error("--fail-under requires --judge (no judge scores to gate on)")
+        return EXIT_CONFIG
+
     conn = _connect_db()
     try:
         results_repo = PostgresResultsRepository(conn)
@@ -541,6 +577,27 @@ def main(argv: Optional[list[str]] = None) -> int:
             )
         _print_variance_summary(outcome)
         _print_style_summary(outcome)
+
+        # Regression gate (SCRUM-25): a below-threshold mean is the most
+        # actionable signal, so it takes precedence over a partial-failure exit.
+        failures = regression_failures(outcome, args.fail_under)
+        for model_key, mean in failures:
+            log.error(
+                "regression gate failed",
+                extra={
+                    "model": model_key,
+                    "run_id": run_id,
+                    "mean_score": round(mean, 2),
+                    "threshold": args.fail_under,
+                },
+            )
+        if failures:
+            print(
+                f"\n✗ Regression gate: {len(failures)} model(s) below "
+                f"{args.fail_under}/5 — "
+                + ", ".join(f"{m}={mean:.2f}" for m, mean in failures)
+            )
+            return EXIT_REGRESSION
         return EXIT_PARTIAL_FAILURE if outcome.failed else EXIT_OK
     finally:
         conn.close()

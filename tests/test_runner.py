@@ -20,13 +20,14 @@ from app.datasets import Case, Dataset
 from app.llm_client import LLMResponse
 from app.results_repository import ModelNotFoundError, ModelRow
 from app.runner import (
+    RunOutcome,
     build_prompt,
     compute_cost,
     execute_run,
     main,
+    regression_failures,
     resolve_models,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -822,7 +823,7 @@ def test_parse_args_accepts_temperature_and_max_workers():
 def test_parse_args_samples_defaults_to_high():
     """--samples defaults to DEFAULT_SAMPLES (high) so runs carry a spread
     out of the box; omitting it must not silently fall back to single-shot."""
-    from app.runner import _parse_args, DEFAULT_SAMPLES
+    from app.runner import DEFAULT_SAMPLES, _parse_args
 
     args = _parse_args(["--dataset", "x.yaml", "--models", "claude-sonnet-4-6"])
     assert args.samples == DEFAULT_SAMPLES
@@ -880,3 +881,64 @@ def test_main_happy_path_persists_results_to_db(tmp_path):
     assert fake_results_repo.inserts[0].question == "hi"
     assert fake_results_repo.inserts[0].response == "hello back"
     assert fake_results_repo.finalized  # run was finalized
+
+
+# ---------------------------------------------------------------------------
+# Regression gate (SCRUM-25)
+# ---------------------------------------------------------------------------
+
+
+def _outcome_with_scores(model_scores: dict[str, list[Decimal]]) -> RunOutcome:
+    """A minimal RunOutcome carrying only per-model judge scores — enough to
+    exercise the gate, which reads `model_score_stats()`."""
+    return RunOutcome(
+        inserted=sum(len(v) for v in model_scores.values()),
+        failed=0,
+        total_cost=Decimal(0),
+        total_input_tokens=0,
+        total_output_tokens=0,
+        latencies_ms=[],
+        model_scores=model_scores,
+    )
+
+
+def test_regression_failures_off_when_threshold_is_none():
+    outcome = _outcome_with_scores({"m": [Decimal("1.0")]})
+    # Gate disabled → no failures regardless of how low the score is.
+    assert regression_failures(outcome, None) == []
+
+
+def test_regression_failures_flags_model_below_threshold():
+    outcome = _outcome_with_scores(
+        {
+            "good": [Decimal("4.0"), Decimal("4.0")],  # mean 4.0
+            "bad": [Decimal("2.0"), Decimal("4.0")],   # mean 3.0
+        }
+    )
+    assert regression_failures(outcome, 3.5) == [("bad", 3.0)]
+
+
+def test_regression_failures_boundary_is_exclusive():
+    # Exactly at threshold passes (mean < fail_under is the failing condition).
+    outcome = _outcome_with_scores({"edge": [Decimal("3.5")]})
+    assert regression_failures(outcome, 3.5) == []
+
+
+def test_regression_failures_passes_when_all_above():
+    outcome = _outcome_with_scores(
+        {"a": [Decimal("4.2")], "b": [Decimal("3.6")]}
+    )
+    assert regression_failures(outcome, 3.5) == []
+
+
+def test_regression_failures_sorted_by_model_key():
+    outcome = _outcome_with_scores(
+        {"zeta": [Decimal("1.0")], "alpha": [Decimal("2.0")]}
+    )
+    assert [m for m, _ in regression_failures(outcome, 3.5)] == ["alpha", "zeta"]
+
+
+def test_regression_failures_ignores_unjudged_models():
+    # A model with no scores contributes no stats → can't fail the gate.
+    outcome = _outcome_with_scores({"judged": [Decimal("4.0")], "unjudged": []})
+    assert regression_failures(outcome, 3.5) == []

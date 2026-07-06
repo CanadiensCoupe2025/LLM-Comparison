@@ -6,7 +6,6 @@ needing a live PostgreSQL.
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from app.prompts.hasher import compute_hash
 from app.prompts.repository import PromptRow

@@ -13,10 +13,8 @@ from app.llm_client import (
     MissingApiKeyError,
     ProviderMismatchError,
     UnknownModelError,
-    UnknownProviderError,
     call_llm,
 )
-
 
 # ---------------------------------------------------------------------------
 # Registry consistency

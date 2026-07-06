@@ -9,15 +9,15 @@ swap in a fake and spend zero tokens.
 """
 from __future__ import annotations
 
-
 import json
 import re
 import time
-from dataclasses import dataclass,field
+from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Callable, Any
-from app.llm_client import LLMResponse, call_llm
 from pathlib import Path
+from typing import Any, Callable
+
+from app.llm_client import LLMResponse, call_llm
 from app.logging_setup import get_logger
 from app.prompts.loader import load_prompt
 

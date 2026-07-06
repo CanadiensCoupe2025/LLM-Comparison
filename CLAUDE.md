@@ -114,6 +114,25 @@ docker compose exec postgres psql -U llm -d llm_eval
 - **Never log API keys or prompt/response content** (B13) — only call shape and
   outcome (model, provider, latency, tokens).
 
+## CI/CD (SCRUM-25)
+- `.github/workflows/ci.yml` runs on every PR to `main`, in two jobs:
+  - **lint-and-test** (offline, no secrets): `ruff check app tests` then
+    `pytest --cov=app --cov-fail-under=70`. Tests mock the LLM SDKs and psycopg,
+    so this needs no API keys and no database.
+  - **eval-gate** (needs lint-and-test): Postgres 16 service → apply
+    `db/schema.sql` + `db/0*.sql` + `db/seed.sql` → `prompts.cli sync` → a real
+    but tiny eval (`sprint1_smoke.yaml` × `claude-haiku-4-5` + `gpt-5`,
+    Gemini judge) with `--fail-under 3.5`. API keys come from GitHub Secrets
+    (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`); the job fails
+    fast with an explicit error if any of the three secrets is missing.
+- **Regression gate** = `runner --fail-under SCORE` (requires `--judge`): exits
+  code 5 (`EXIT_REGRESSION`, beats the partial-failure code 3) if any model's
+  mean judge score is below SCORE on the 0–5 scale. Logic lives in the pure,
+  unit-tested `regression_failures()` helper in `app/runner.py`.
+- **Lint** is intentionally conservative: ruff `select = ["E","F","I"]`,
+  `ignore = ["E501","E731"]` (see `[tool.ruff]` in `pyproject.toml`). Dev/CI
+  tooling is in `requirements-dev.txt` (not in the runtime image).
+
 ## Rules
 - Never commit .env
 - API keys go in .env only, never hardcoded
