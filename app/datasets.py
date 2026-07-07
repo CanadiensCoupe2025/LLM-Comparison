@@ -89,3 +89,22 @@ def load_dataset(path: Path) -> Dataset:
         source_path=path,
         raw=doc,
     )
+
+
+def discover_datasets(directory: Path) -> list[Dataset]:
+    """Load every valid `*.yaml` dataset in `directory`, sorted by filename.
+
+    Files that fail to parse (`DatasetError` — a stray README, a malformed
+    YAML) are skipped so one bad file never breaks a caller iterating the
+    folder (e.g. the GUI's dataset picker). Mirrors the prompt loader's
+    directory scan in app/prompts/loader.py; there is no other dataset-
+    discovery helper in the codebase.
+    """
+    directory = Path(directory)
+    datasets: list[Dataset] = []
+    for path in sorted(directory.glob("*.yaml")):
+        try:
+            datasets.append(load_dataset(path))
+        except DatasetError:
+            continue
+    return datasets

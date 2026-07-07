@@ -1,0 +1,6 @@
+# Dépendances du GUI de démo (SCRUM-33/34). Tourne sur l'HÔTE dans .venv,
+# séparé de app/requirements.txt pour ne pas alourdir l'image Docker de l'app.
+#   python3 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements-gui.txt
+-r app/requirements.txt
+streamlit>=1.40

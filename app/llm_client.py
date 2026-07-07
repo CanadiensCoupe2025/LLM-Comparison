@@ -58,11 +58,31 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     "claude-haiku-4-5": ModelSpec(
         "anthropic", "claude-haiku-4-5-20251001", ApiSurface.MESSAGES, True, False, 200_000
     ),
+    # Sonnet 5 (like Opus 4.7/4.8) rejects temperature/top_p/top_k with a 400 —
+    # supports_temperature=False so the adapter never sends it.
+    "claude-sonnet-5": ModelSpec(
+        "anthropic", "claude-sonnet-5", ApiSurface.MESSAGES, False, False, 1_000_000
+    ),
     "gpt-5": ModelSpec(
         "openai", "gpt-5-2025-08-07", ApiSurface.RESPONSES, False, True, 400_000
     ),
     "o3": ModelSpec(
         "openai", "o3-2025-04-16", ApiSurface.RESPONSES, False, True, 200_000
+    ),
+    # GPT-5.x on the Responses surface (reasoning): temperature is rejected in
+    # reasoning mode, so supports_temperature=False. mini/nano are the fast/cheap
+    # tiers (replacing the API-unavailable GPT-5.3 Instant).
+    "gpt-5.5": ModelSpec(
+        "openai", "gpt-5.5", ApiSurface.RESPONSES, False, True, 400_000
+    ),
+    "gpt-5.4": ModelSpec(
+        "openai", "gpt-5.4", ApiSurface.RESPONSES, False, True, 400_000
+    ),
+    "gpt-5.4-mini": ModelSpec(
+        "openai", "gpt-5.4-mini", ApiSurface.RESPONSES, False, True, 400_000
+    ),
+    "gpt-5.4-nano": ModelSpec(
+        "openai", "gpt-5.4-nano", ApiSurface.RESPONSES, False, True, 400_000
     ),
     "deepseek-v4-flash": ModelSpec(
         "deepseek", "deepseek-v4-flash", ApiSurface.CHAT_COMPLETIONS, True, False, 128_000
