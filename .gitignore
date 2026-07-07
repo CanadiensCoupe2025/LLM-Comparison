@@ -222,8 +222,7 @@ __marimo__/
 !.env.example
 .DS_Store
 
-# Local DB snapshot (pg_dump safety net — not source)
+# Local DB snapshots (pg_dump safety net — not source); kept in eval_backups/.
+# The root-level rule stays in case a future pg_dump lands at the root again.
 llm_eval_backup.sql
-
-# Saved eval-run backups (data, not source)
 eval_backups/
