@@ -58,3 +58,17 @@ docker compose exec app pytest               # tests
 docker compose exec postgres psql -U llm -d llm_eval   # accès base
 python runner.py --dataset <yaml> --models <clés…>     # eval en CLI
 ```
+
+## Nettoyer les données d'éval (runs de test)
+
+Les dashboards Grafana affichent ce que contient Postgres — nettoyer la base
+suffit à les « rafraîchir ». Le script fait **toujours** un backup
+(`pg_dump --clean` horodaté dans `eval_backups/`) avant de supprimer, et
+n'efface jamais le catalogue (`models`, `prompts`).
+
+```bash
+bash scripts/reset_db.sh --today     # supprime les runs d'AUJOURD'HUI (tests)
+bash scripts/reset_db.sh --run 42    # supprime un run précis
+bash scripts/reset_db.sh --all       # base vierge (runs/results/decisions)
+# --yes pour sauter la confirmation ; la commande de restauration est affichée.
+```
