@@ -27,7 +27,13 @@ INSERT INTO models (provider, name, version, input_cost, output_cost, context_wi
     ('DeepSeek',  'deepseek-v4-flash',   '2026-05', 0.00000030, 0.0000010,  128000),
     ('DeepSeek',  'deepseek-v4-pro',     '2026-05', 0.0000010,  0.0000030,  128000),
     ('Google', 'gemini-2.5-pro',    '2025',     0.00000125,  0.0000100,  1048576),
-    ('Google', 'gemini-2.5-flash',  '2025',     0.00000030,  0.0000025,  1048576)
+    ('Google', 'gemini-2.5-flash',  '2025',     0.00000030,  0.0000025,  1048576),
+    -- Modèles ajoutés pour la démo (SCRUM-33/34) — aussi dans db/018_seed_new_models.sql
+    ('Anthropic', 'claude-sonnet-5',  '2026-01', 0.0000030,   0.0000150,   1000000),
+    ('OpenAI',    'gpt-5.5',          '2026-04', 0.0000050,   0.0000300,   400000),
+    ('OpenAI',    'gpt-5.4',          '2026',    0.0000025,   0.0000150,   400000),
+    ('OpenAI',    'gpt-5.4-mini',     '2026',    0.00000075,  0.0000045,   400000),
+    ('OpenAI',    'gpt-5.4-nano',     '2026',    0.00000020,  0.00000125,  400000)
 ON CONFLICT (provider, name, version) DO NOTHING;
 
 -- Note : les prompts sont gérés par SCRUM-18 (sync depuis YAML) :

@@ -21,13 +21,18 @@ from app.llm_client import (
 # ---------------------------------------------------------------------------
 
 
-def test_registry_lists_the_nine_required_models():
+def test_registry_lists_all_models():
     assert set(MODEL_REGISTRY.keys()) == {
         "claude-sonnet-4-6",
         "claude-opus-4-8",
         "claude-haiku-4-5",
+        "claude-sonnet-5",
         "gpt-5",
         "o3",
+        "gpt-5.5",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
         "gemini-2.5-pro",
@@ -39,16 +44,25 @@ def test_registry_provider_counts():
     by_provider: dict[str, int] = {}
     for spec in MODEL_REGISTRY.values():
         by_provider[spec.provider] = by_provider.get(spec.provider, 0) + 1
-    # Anthropic: sonnet + opus + haiku; openai/deepseek x2; gemini pro + flash (judges).
-    assert by_provider == {"anthropic": 3, "openai": 2, "deepseek": 2, "gemini": 2}
+    # Anthropic: sonnet-4-6/opus-4-8/haiku-4-5/sonnet-5; openai x6 (gpt-5, o3,
+    # gpt-5.5/5.4/5.4-mini/5.4-nano); deepseek x2; gemini pro + flash (judges).
+    assert by_provider == {"anthropic": 4, "openai": 6, "deepseek": 2, "gemini": 2}
 
 
 def test_openai_reasoning_models_disable_temperature():
-    for key in ("gpt-5", "o3"):
+    # gpt-5.x on the Responses surface reject temperature in reasoning mode.
+    for key in ("gpt-5", "o3", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"):
         spec = MODEL_REGISTRY[key]
         assert spec.surface == ApiSurface.RESPONSES
         assert spec.supports_temperature is False
         assert spec.returns_reasoning is True
+
+
+def test_sonnet_5_disables_temperature():
+    # Sonnet 5 rejects temperature/top_p/top_k (like Opus 4.7/4.8) → never send it.
+    spec = MODEL_REGISTRY["claude-sonnet-5"]
+    assert spec.surface == ApiSurface.MESSAGES
+    assert spec.supports_temperature is False
 
 
 # ---------------------------------------------------------------------------

@@ -368,6 +368,66 @@ def execute_run(
     )
 
 
+def launch_run(
+    dataset_path,
+    model_keys: list[str],
+    *,
+    samples: int = 1,
+    temperature: float = 0.0,
+    do_judge: bool = False,
+    max_workers: int = DEFAULT_MAX_WORKERS,
+) -> tuple[int, RunOutcome]:
+    """Run an evaluation and return `(run_id, RunOutcome)`.
+
+    A library entry point for callers that want the outcome object — e.g. the
+    Streamlit GUI (`gui.py`) — without `main()`'s argv parsing, stdout summary,
+    or `sys.exit`. Wires up the same pieces as `main()` but raises ordinary
+    exceptions (`RuntimeError`, `DatasetError`, `ValueError`,
+    `ModelNotFoundError`) instead of exiting the process, so a UI can catch and
+    render them. `main()` is deliberately left untouched — the CLI and the CI
+    regression gate keep their exact behaviour.
+
+    The `runs.dataset` column stores the dataset *file* name, matching `main()`.
+    """
+    configure_logging()
+    dataset = load_dataset(dataset_path)
+
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise RuntimeError("DATABASE_URL is not set — check your .env.")
+
+    conn = psycopg.connect(url)
+    try:
+        results_repo = PostgresResultsRepository(conn)
+        prompt_repo = PostgresPromptRepository(conn)
+
+        model_pairs = resolve_models(model_keys, results_repo)
+
+        prompt_row = prompt_repo.latest_by_name(SYSTEM_PROMPT_NAME)
+        if prompt_row is None:
+            raise RuntimeError(
+                f"System prompt {SYSTEM_PROMPT_NAME!r} not found in the `prompts` "
+                "table. Run `python -m app.prompts.cli sync` first."
+            )
+
+        run_id = results_repo.create_run(prompt_row.id, Path(dataset_path).name)
+        with log_context(run_id=run_id):
+            outcome = execute_run(
+                dataset=dataset,
+                model_pairs=model_pairs,
+                system_prompt=prompt_row.content,
+                run_id=run_id,
+                repo=results_repo,
+                max_workers=max_workers,
+                temperature=temperature,
+                samples=samples,
+                do_judge=do_judge,
+            )
+        return run_id, outcome
+    finally:
+        conn.close()
+
+
 # ---------------------------------------------------------------------------
 # CLI plumbing
 # ---------------------------------------------------------------------------
