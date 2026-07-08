@@ -1,4 +1,4 @@
-"""Common LLM client for Claude, OpenAI, and DeepSeek.
+"""Common LLM client for Claude, OpenAI, and Gemini.
 
 Exposes a single entry point — `call_llm(provider, model, prompt)` — backed by
 a model registry and per-provider adapters. Add a new model by adding a row to
@@ -19,7 +19,7 @@ log = get_logger(__name__)
 
 class ApiSurface(str, Enum):
     MESSAGES = "messages"            # Anthropic
-    CHAT_COMPLETIONS = "chat"        # OpenAI gpt-4o family, DeepSeek
+    CHAT_COMPLETIONS = "chat"        # OpenAI gpt-4o family
     RESPONSES = "responses"          # OpenAI reasoning models (o-series, gpt-5)
     GEMINI = "gemini"         
 
@@ -83,12 +83,6 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     ),
     "gpt-5.4-nano": ModelSpec(
         "openai", "gpt-5.4-nano", ApiSurface.RESPONSES, False, True, 400_000
-    ),
-    "deepseek-v4-flash": ModelSpec(
-        "deepseek", "deepseek-v4-flash", ApiSurface.CHAT_COMPLETIONS, True, False, 128_000
-    ),
-    "deepseek-v4-pro": ModelSpec(
-        "deepseek", "deepseek-v4-pro", ApiSurface.CHAT_COMPLETIONS, True, True, 128_000
     ),
     "gemini-2.5-pro": ModelSpec(
         "gemini","gemini-2.5-pro", ApiSurface.GEMINI, True, False, 1_048_576
@@ -294,57 +288,11 @@ class OpenAIAdapter:
         )
 
 
-class DeepSeekAdapter:
-    """DeepSeek's API is OpenAI-compatible; reuse the OpenAI SDK with a custom base_url."""
-
-    BASE_URL = "https://api.deepseek.com"
-
-    def call(
-        self,
-        spec: ModelSpec,
-        prompt: str,
-        *,
-        max_tokens: int = DEFAULT_MAX_TOKENS,
-        temperature: float = 0.0,
-    ) -> LLMResponse:
-        import openai
-
-        client = openai.OpenAI(
-            api_key=_require_env("DEEPSEEK_API_KEY"),
-            base_url=self.BASE_URL,
-        )
-        kwargs: dict[str, Any] = {
-            "model": spec.api_id,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": max_tokens,
-        }
-        if spec.supports_temperature:
-            kwargs["temperature"] = temperature
-
-        t0 = time.perf_counter()
-        raw = client.chat.completions.create(**kwargs)
-        latency_ms = (time.perf_counter() - t0) * 1000.0
-
-        msg = raw.choices[0].message
-        reasoning: str | None = None
-        if spec.returns_reasoning:
-            reasoning = getattr(msg, "reasoning_content", None)
-
-        return LLMResponse(
-            content=msg.content,
-            reasoning=reasoning,
-            tokens_in=raw.usage.prompt_tokens,
-            tokens_out=raw.usage.completion_tokens,
-            latency_ms=latency_ms,
-            model_id=spec.api_id,
-            raw=raw,
-        )
 
 
 _ADAPTERS: dict[str, Any] = {
     "anthropic": AnthropicAdapter(),
     "openai": OpenAIAdapter(),
-    "deepseek": DeepSeekAdapter(),
     "gemini": GeminiAdapter(), 
 }
 

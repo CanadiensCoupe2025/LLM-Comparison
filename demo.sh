@@ -67,9 +67,6 @@ step "API keys present in environment"
 [[ -n "${ANTHROPIC_API_KEY:-}" ]] || die "ANTHROPIC_API_KEY not set in .env"
 [[ -n "${OPENAI_API_KEY:-}"    ]] || die "OPENAI_API_KEY not set in .env"
 ok "ANTHROPIC_API_KEY and OPENAI_API_KEY loaded"
-if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
-  warn "DEEPSEEK_API_KEY not set — DeepSeek models skipped (registry-ready, just gated by missing key)."
-fi
 
 step "Python venv + deps"
 if [[ ! -d .venv ]]; then

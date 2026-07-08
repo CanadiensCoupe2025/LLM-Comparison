@@ -105,7 +105,7 @@ dataset:
   description: >
     Jeu de prompts de régression v2 : canaris déterministes,
     cas principaux discriminants et cas limites pour comparer
-    les modèles (Claude, OpenAI, DeepSeek) et détecter les
+    les modèles (Claude, OpenAI) et détecter les
     régressions de qualité entre versions de prompts ou de modèles.
 
 defaults:

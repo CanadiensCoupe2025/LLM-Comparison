@@ -100,7 +100,7 @@ class FakeResultsRepository:
 def _model(*, id: int, name: str, in_cost: str, out_cost: str) -> ModelRow:
     return ModelRow(
         id=id,
-        provider="anthropic" if "claude" in name else ("openai" if "gpt" in name or name == "o3" else "deepseek"),
+        provider="anthropic" if "claude" in name else "openai",
         name=name,
         version=None,
         input_cost=Decimal(in_cost),
@@ -150,11 +150,11 @@ def test_compute_cost_is_input_times_in_plus_output_times_out():
 def test_resolve_models_returns_pairs_in_order():
     models = {
         "claude-sonnet-4-6": _model(id=1, name="claude-sonnet-4-6", in_cost="0.000003", out_cost="0.000015"),
-        "deepseek-v4-flash": _model(id=2, name="deepseek-v4-flash", in_cost="0", out_cost="0"),
+        "gpt-5.4-nano": _model(id=2, name="gpt-5.4-nano", in_cost="0", out_cost="0"),
     }
     repo = FakeResultsRepository(models)
-    pairs = resolve_models(["deepseek-v4-flash", "claude-sonnet-4-6"], repo)
-    assert [k for k, _ in pairs] == ["deepseek-v4-flash", "claude-sonnet-4-6"]
+    pairs = resolve_models(["gpt-5.4-nano", "claude-sonnet-4-6"], repo)
+    assert [k for k, _ in pairs] == ["gpt-5.4-nano", "claude-sonnet-4-6"]
 
 
 def test_resolve_models_rejects_unknown_registry_key():
@@ -178,7 +178,7 @@ def test_execute_run_inserts_one_row_per_case_model_pair():
     cases = [_case("c1", "prompt one"), _case("c2", "prompt two")]
     pairs = [
         ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0.000003", out_cost="0.000015")),
-        ("deepseek-v4-flash", _model(id=2, name="deepseek-v4-flash", in_cost="0", out_cost="0")),
+        ("gpt-5.4-nano", _model(id=2, name="gpt-5.4-nano", in_cost="0", out_cost="0")),
     ]
     repo = FakeResultsRepository({k: v for k, v in pairs})
     fake_call = lambda *_a, **_k: _fake_response("ok", 10, 5)
@@ -344,7 +344,7 @@ def test_execute_run_aggregates_metrics_into_run_outcome():
     """SCRUM-22: RunOutcome should sum cost + tokens and collect latencies."""
     pairs = [
         ("claude-sonnet-4-6", _model(id=1, name="claude-sonnet-4-6", in_cost="0.000003", out_cost="0.000015")),
-        ("deepseek-v4-flash", _model(id=2, name="deepseek-v4-flash", in_cost="0", out_cost="0")),
+        ("gpt-5.4-nano", _model(id=2, name="gpt-5.4-nano", in_cost="0", out_cost="0")),
     ]
     repo = FakeResultsRepository({k: v for k, v in pairs})
 

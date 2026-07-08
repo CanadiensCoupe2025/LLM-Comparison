@@ -31,7 +31,7 @@ direct : si Claude rédige tout, Olivier récite un texte qu'il ne maîtrise pas
 
 ## 2. Le projet en bref (pour le Claude qui reprend)
 
-Plateforme d'évaluation de LLM : compare Claude / OpenAI / DeepSeek / Gemini sur les mêmes prompts, mesure
+Plateforme d'évaluation de LLM : compare Claude / OpenAI / Gemini sur les mêmes prompts, mesure
 qualité (LLM-as-judge Gemini, échelle 0–5), latence, tokens, coût ; persiste tout en Postgres ; détecte les
 régressions en CI. Détails complets dans `docs/ARCHITECTURE.md`.
 
