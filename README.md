@@ -1,11 +1,22 @@
 # LLM-Comparison
 
-Plateforme d'évaluation de LLMs : compare Claude / OpenAI / DeepSeek / Gemini
-sur les mêmes prompts, mesure qualité (juge LLM), latence, tokens et coût,
-persiste tout dans PostgreSQL et détecte les régressions en CI.
+Plateforme d'évaluation de LLMs : compare Claude / OpenAI / Gemini
+sur les mêmes prompts, mesure qualité (juge LLM Gemini, score 0–5), latence,
+tokens et coût, persiste tout dans PostgreSQL, visualise dans Grafana et
+détecte les régressions en CI.
 
-> 📝 Le README complet (architecture, story, GIF de démo) est en cours de
-> rédaction — voir SCRUM-33. Cette section couvre le démarrage et les commandes.
+**Pourquoi ?** Choisir un modèle (ou un abonnement) sur la base de *ses
+propres* prompts et de mesures reproductibles — pas de benchmarks marketing.
+
+📚 Docs : [RUNBOOK.md](RUNBOOK.md) (opérations, debug, coûts) ·
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (conception complète)
+
+## Démo
+
+![Démo : GUI → run → Grafana](docs/demo/demo.gif)
+
+*Choisir les modèles et le dataset dans le GUI, lancer, puis regarder les
+dashboards Grafana se remplir (latence / qualité / coût par modèle).*
 
 ## Démarrage rapide
 
@@ -47,7 +58,7 @@ bascule sur Grafana pour voir les métriques se remplir.
 Les modèles testables sont ceux de `MODEL_REGISTRY`
 ([app/llm_client.py](app/llm_client.py)) — Claude (Opus 4.8, Sonnet 5,
 Haiku 4.5, Sonnet 4.6), OpenAI (GPT-5.5, GPT-5.4, GPT-5.4-mini/nano, GPT-5,
-o3), DeepSeek et Gemini. Ajouter un modèle = une entrée dans le registre +
+o3) et Gemini. Ajouter un modèle = une entrée dans le registre +
 une ligne dans `db/seed.sql` (et une migration `db/0NN_*.sql`).
 
 ## Commandes utiles

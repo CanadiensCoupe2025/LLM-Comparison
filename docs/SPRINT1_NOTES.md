@@ -14,7 +14,7 @@
 | SCRUM-14 | Initialisation du monorepo | — | ✅ Done |
 | SCRUM-15 | Docker Compose (app + Postgres + Grafana) | — | ✅ Done |
 | SCRUM-16 | Schéma PostgreSQL (4 tables) | [#2](https://github.com/CanadiensCoupe2025/LLM-Comparison/pull/2) | ✅ Done |
-| SCRUM-17 | `app/llm_client.py` (Claude, OpenAI, DeepSeek) | [#5](https://github.com/CanadiensCoupe2025/LLM-Comparison/pull/5) | ✅ Done |
+| SCRUM-17 | `app/llm_client.py` (Claude, OpenAI) | [#5](https://github.com/CanadiensCoupe2025/LLM-Comparison/pull/5) | ✅ Done |
 | SCRUM-18 | Versioning des prompts en YAML | [#3](https://github.com/CanadiensCoupe2025/LLM-Comparison/pull/3), [#4](https://github.com/CanadiensCoupe2025/LLM-Comparison/pull/4) | ✅ Done |
 | SCRUM-19 | Runner multi-modèles + persistance | [#7](https://github.com/CanadiensCoupe2025/LLM-Comparison/pull/7) | ✅ Done |
 | SCRUM-20 | Pytest + couverture ≥70% | [#8](https://github.com/CanadiensCoupe2025/LLM-Comparison/pull/8) | ✅ Done |
@@ -27,7 +27,7 @@
 
 ### 2.1 Préconditions vérifiées
 
-- [x] `.env` présent avec `ANTHROPIC_API_KEY` et `OPENAI_API_KEY` (DeepSeek non testé pour cette validation)
+- [x] `.env` présent avec `ANTHROPIC_API_KEY` et `OPENAI_API_KEY`
 - [x] `docker compose up -d postgres` → conteneur sain
 - [x] Migrations appliquées dans l'ordre : `schema.sql` → `002_prompt_versioning.sql` → `003_results_case_id.sql`
 - [x] Seed appliqué : `seed.sql` (5 modèles à l'origine, corrigé pendant la validation — voir section 4)
@@ -78,9 +78,9 @@ ORDER BY m.name;
 
 **Les 4 modèles ont identifié Ottawa.** `runs.id=7`, `prompt_id=4` (→ `eval_system`), `started_at=2026-06-16 14:43:27`, `finished_at=2026-06-16 14:43:34` (rempli — `execute_run.finally` fonctionne).
 
-### 2.4 Smoke DeepSeek (au-delà du DoD)
+### 2.4 Smoke troisième fournisseur (au-delà du DoD)
 
-**Non exécuté.** Pas de `DEEPSEEK_API_KEY` configurée pour cette validation. Le code est prêt (adaptateur + entrées registre + entrées seed.sql) ; il suffira d'obtenir une clé DeepSeek et de relancer le runner avec `--models deepseek-v4-flash deepseek-v4-pro` pour fermer ce gap. Ticket de suivi recommandé pour le sprint 2.
+**Non exécuté, puis retiré du périmètre.** Le troisième fournisseur envisagé n'a jamais été validé en réel (pas de clé API) et a depuis été écarté du projet — ce smoke test n'a plus d'objet.
 
 ### 2.5 Audit des clés API
 
@@ -131,7 +131,7 @@ Tous les bugs ci-dessous ont été détectés ET corrigés dans la même PR (#9)
 
 **Symptôme** : `error: No row in 'models' table for name='claude-opus-4-8'.`
 
-**Cause** : SCRUM-16 (seed) ne référençait aucun des modèles choisis par SCRUM-17 (registre). Le seed insérait `gpt-4o`, `gpt-4o-mini`, `gemini-1.5-pro` (jamais utilisés) ; il manquait `claude-opus-4-8`, `gpt-5`, `o3`, et les deux DeepSeek.
+**Cause** : SCRUM-16 (seed) ne référençait aucun des modèles choisis par SCRUM-17 (registre). Le seed insérait `gpt-4o`, `gpt-4o-mini`, `gemini-1.5-pro` (jamais utilisés) ; il manquait `claude-opus-4-8`, `gpt-5` et `o3`.
 
 **Fix** : `db/seed.sql` réécrit pour refléter exactement les 6 entrées de `MODEL_REGISTRY`, avec `ON CONFLICT (provider, name, version) DO NOTHING` pour rester idempotent.
 
@@ -168,7 +168,7 @@ Identifiés pendant l'épopée mais hors scope SCRUM-10 :
 1. **`docker compose exec app pytest` ne marche pas.** Le `Dockerfile` ne `COPY` que `app/`, donc `tests/` et `pyproject.toml` ne sont pas dans l'image. Workaround actuel : pytest en local. Fix : élargir le contexte du build OU ajouter un bind-mount dans `docker-compose.yml`.
 2. **Aucun dashboard Grafana.** Le service est up, mais `dashboard/` contient juste un `.gitkeep`. Bloque la visualisation des résultats. À planifier au sprint 2.
 3. **Aucun workflow GitHub Actions.** `.github/workflows/` contient un `.gitkeep`. La couverture (`pytest --cov-fail-under=70`) est mesurée localement mais pas appliquée à la merge. Recommandation : créer un ticket pour le sprint 2.
-4. **DeepSeek jamais exercé en réel.** Code prêt, registry à jour, seed à jour, mais validation reportée (pas de clé API DeepSeek). Ticket de suivi recommandé.
+4. **Troisième fournisseur jamais exercé en réel.** Validation reportée faute de clé API ; fournisseur depuis retiré du périmètre.
 5. **Adaptateur OpenAI CHAT_COMPLETIONS jamais exercé.** Aucun modèle du `MODEL_REGISTRY` n'utilise la surface Chat aujourd'hui (`gpt-5` et `o3` sont sur Responses). Code dormant ; à brancher quand un modèle gpt-4o-class sera ajouté.
 6. **CLI `app/prompts/cli.py` à 0% de couverture.** Le UX est fonctionnel mais aucun test ne le pin. Suite logique de SCRUM-20.
 7. **`runner.py` impose `DATABASE_URL=…@localhost…` quand exécuté depuis l'hôte.** Le `.env` par défaut pointe vers `postgres:5432` (hostname Docker interne). Devrait être documenté dans le README ou résolu via une seconde variable d'env.
@@ -188,7 +188,6 @@ cd LLM-Comparison
 # 2. Préparer le .env
 cp .env.example .env
 # Éditer .env et remplir ANTHROPIC_API_KEY, OPENAI_API_KEY
-# (+ DEEPSEEK_API_KEY si on veut tester DeepSeek)
 
 # 3. Démarrer Postgres
 docker compose up -d postgres

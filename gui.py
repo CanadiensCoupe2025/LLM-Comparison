@@ -64,17 +64,41 @@ idx = st.selectbox(
 )
 dataset = datasets[idx]
 
+col1, col2 = st.columns(2)
+with col1:
+    do_judge = st.checkbox(
+        "Juger avec Gemini (score 0–5)",
+        value=False,
+        help="Chaque réponse est notée par le juge LLM (SCRUM-23) et alimente "
+        "les dashboards qualité. Un appel Gemini par réponse — plus lent, un "
+        "peu plus cher.",
+    )
+with col2:
+    samples = st.number_input(
+        "Samples par (cas, modèle)",
+        min_value=1,
+        max_value=10,
+        value=1,
+        help="N tirages par paire pour une moyenne ± écart-type au lieu d'un "
+        "tirage unique (vue result_variance).",
+    )
+
 # --- Lancement ---------------------------------------------------------------
 if st.button("▶ Run", type="primary"):
     if not models:
         st.warning("Coche au moins un modèle.")
         st.stop()
 
+    n_calls = len(dataset.cases) * len(models) * int(samples)
     with st.spinner(
-        f"Évaluation de {len(models)} modèle(s) sur {len(dataset.cases)} cas…"
+        f"Évaluation de {len(models)} modèle(s) sur {len(dataset.cases)} cas"
+        f" × {int(samples)} sample(s) = {n_calls} appels"
+        f"{' + jugement Gemini' if do_judge else ''}…"
     ):
         try:
-            run_id, outcome = launch_run(dataset.source_path, models)
+            run_id, outcome = launch_run(
+                dataset.source_path, models, samples=int(samples), do_judge=do_judge
+            )
         except Exception as e:  # message propre plutôt qu'une stack trace en démo
             st.error(f"Échec du run : {e}")
             st.stop()
@@ -84,6 +108,13 @@ if st.button("▶ Run", type="primary"):
         f"{f', {outcome.failed} échec(s)' if outcome.failed else ''}, "
         f"coût ~${outcome.total_cost:.4f}."
     )
+    # Judged run: surface the per-model mean ± stddev right in the GUI.
+    stats = outcome.model_score_stats()
+    if stats:
+        st.markdown("**Score juge (0–5), moyenne ± écart-type :**")
+        for model_key in sorted(stats):
+            mean, stddev, n = stats[model_key]
+            st.markdown(f"- `{model_key}` : **{mean:.2f}** ± {stddev:.2f} (n={n})")
     st.markdown(
         f"→ Ouvre **[Grafana]({GRAFANA_URL})** (dashboard *llm_model_comparison*) "
         "pour comparer latence / qualité / coût par modèle."

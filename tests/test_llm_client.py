@@ -33,8 +33,6 @@ def test_registry_lists_all_models():
         "gpt-5.4",
         "gpt-5.4-mini",
         "gpt-5.4-nano",
-        "deepseek-v4-flash",
-        "deepseek-v4-pro",
         "gemini-2.5-pro",
         "gemini-2.5-flash",
     }
@@ -45,8 +43,8 @@ def test_registry_provider_counts():
     for spec in MODEL_REGISTRY.values():
         by_provider[spec.provider] = by_provider.get(spec.provider, 0) + 1
     # Anthropic: sonnet-4-6/opus-4-8/haiku-4-5/sonnet-5; openai x6 (gpt-5, o3,
-    # gpt-5.5/5.4/5.4-mini/5.4-nano); deepseek x2; gemini pro + flash (judges).
-    assert by_provider == {"anthropic": 4, "openai": 6, "deepseek": 2, "gemini": 2}
+    # gpt-5.5/5.4/5.4-mini/5.4-nano); gemini pro + flash (judges).
+    assert by_provider == {"anthropic": 4, "openai": 6, "gemini": 2}
 
 
 def test_openai_reasoning_models_disable_temperature():
@@ -127,56 +125,6 @@ def test_openai_responses_api_surfaces_reasoning_summary(mock_openai_cls):
     assert call_kwargs["model"] == "gpt-5-2025-08-07"
     assert call_kwargs["input"] == "hi"
     assert "temperature" not in call_kwargs  # reasoning models reject temperature
-
-
-# ---------------------------------------------------------------------------
-# DeepSeek — uses the OpenAI SDK against a custom base_url
-# ---------------------------------------------------------------------------
-
-
-@patch.dict(os.environ, {"DEEPSEEK_API_KEY": "test-key"})
-@patch("openai.OpenAI")
-def test_deepseek_v4_pro_surfaces_reasoning_content(mock_openai_cls):
-    mock_client = mock_openai_cls.return_value
-    mock_message = SimpleNamespace(
-        content="Hello from DeepSeek.",
-        reasoning_content="My internal reasoning",
-    )
-    mock_client.chat.completions.create.return_value = SimpleNamespace(
-        choices=[SimpleNamespace(message=mock_message)],
-        usage=SimpleNamespace(prompt_tokens=20, completion_tokens=12),
-    )
-
-    result = call_llm("deepseek", "deepseek-v4-pro", "hi")
-
-    assert result.content == "Hello from DeepSeek."
-    assert result.reasoning == "My internal reasoning"
-    assert result.tokens_in == 20
-    assert result.tokens_out == 12
-
-    # Confirm the OpenAI client was pointed at DeepSeek's endpoint with the right key.
-    client_kwargs = mock_openai_cls.call_args.kwargs
-    assert client_kwargs["base_url"] == "https://api.deepseek.com"
-    assert client_kwargs["api_key"] == "test-key"
-
-
-@patch.dict(os.environ, {"DEEPSEEK_API_KEY": "test-key"})
-@patch("openai.OpenAI")
-def test_deepseek_v4_flash_ignores_reasoning_content(mock_openai_cls):
-    """V4-Flash isn't a reasoning model — even if the API emits reasoning_content, drop it."""
-    mock_client = mock_openai_cls.return_value
-    mock_message = SimpleNamespace(
-        content="Plain answer.",
-        reasoning_content="should be ignored",
-    )
-    mock_client.chat.completions.create.return_value = SimpleNamespace(
-        choices=[SimpleNamespace(message=mock_message)],
-        usage=SimpleNamespace(prompt_tokens=5, completion_tokens=2),
-    )
-
-    result = call_llm("deepseek", "deepseek-v4-flash", "hi")
-    assert result.content == "Plain answer."
-    assert result.reasoning is None
 
 
 # ---------------------------------------------------------------------------

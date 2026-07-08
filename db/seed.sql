@@ -13,7 +13,6 @@
 -- Tarifs en USD par token (input / output). Sources :
 --   Anthropic : https://www.anthropic.com/pricing
 --   OpenAI    : https://openai.com/api/pricing/
---   DeepSeek  : https://api-docs.deepseek.com/quick_start/pricing
 -- À revérifier régulièrement — les prix bougent.
 -- -------------------------------------------------------------
 -- context_window (tokens) added by migration 014 — run seed AFTER it on a
@@ -24,8 +23,6 @@ INSERT INTO models (provider, name, version, input_cost, output_cost, context_wi
     ('Anthropic', 'claude-haiku-4-5',    '2025-10', 0.0000010,  0.0000050,  200000),
     ('OpenAI',    'gpt-5',               '2025-08', 0.0000050,  0.0000150,  400000),
     ('OpenAI',    'o3',                  '2025-04', 0.0000150,  0.0000600,  200000),
-    ('DeepSeek',  'deepseek-v4-flash',   '2026-05', 0.00000030, 0.0000010,  128000),
-    ('DeepSeek',  'deepseek-v4-pro',     '2026-05', 0.0000010,  0.0000030,  128000),
     ('Google', 'gemini-2.5-pro',    '2025',     0.00000125,  0.0000100,  1048576),
     ('Google', 'gemini-2.5-flash',  '2025',     0.00000030,  0.0000025,  1048576),
     -- Modèles ajoutés pour la démo (SCRUM-33/34) — aussi dans db/018_seed_new_models.sql
