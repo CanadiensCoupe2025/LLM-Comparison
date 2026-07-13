@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Regenerates .env.debug from .env before every debug launch, swapping the
+      // Docker-internal hostname for localhost (same rewrite as gui.sh/demo.sh).
+      "label": "make-debug-env",
+      "type": "shell",
+      "command": "sed 's/@postgres:/@localhost:/' .env > .env.debug",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "close": true },
+      "problemMatcher": []
+    }
+  ]
+}

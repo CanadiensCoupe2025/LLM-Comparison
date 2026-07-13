@@ -1,4 +1,4 @@
-"""Common LLM client for Claude, OpenAI, and DeepSeek.
+"""Common LLM client for Claude, OpenAI, and Gemini.
 
 Exposes a single entry point — `call_llm(provider, model, prompt)` — backed by
 a model registry and per-provider adapters. Add a new model by adding a row to
@@ -13,15 +13,20 @@ from enum import Enum
 from typing import Any
 
 from app.logging_setup import get_logger
+from app.retry import call_with_retry
 
 log = get_logger(__name__)
+
+# Per-request network timeout (seconds) for the OpenAI and Gemini SDK clients —
+# bounds worst-case hangs. The Anthropic SDK is left on its own default.
+REQUEST_TIMEOUT_S = 60.0
 
 
 class ApiSurface(str, Enum):
     MESSAGES = "messages"            # Anthropic
-    CHAT_COMPLETIONS = "chat"        # OpenAI gpt-4o family, DeepSeek
-    RESPONSES = "responses"          # OpenAI reasoning models (o-series, gpt-5)
-    GEMINI = "gemini"         
+    CHAT_COMPLETIONS = "chat"        # OpenAI gpt-4o family
+    RESPONSES = "responses"          # OpenAI reasoning models (gpt-5.4, gpt-5.5)
+    GEMINI = "gemini"
 
 
 @dataclass(frozen=True)
@@ -63,33 +68,16 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     "claude-sonnet-5": ModelSpec(
         "anthropic", "claude-sonnet-5", ApiSurface.MESSAGES, False, False, 1_000_000
     ),
-    "gpt-5": ModelSpec(
-        "openai", "gpt-5-2025-08-07", ApiSurface.RESPONSES, False, True, 400_000
-    ),
-    "o3": ModelSpec(
-        "openai", "o3-2025-04-16", ApiSurface.RESPONSES, False, True, 200_000
-    ),
     # GPT-5.x on the Responses surface (reasoning): temperature is rejected in
-    # reasoning mode, so supports_temperature=False. mini/nano are the fast/cheap
-    # tiers (replacing the API-unavailable GPT-5.3 Instant).
+    # reasoning mode, so supports_temperature=False.
     "gpt-5.5": ModelSpec(
         "openai", "gpt-5.5", ApiSurface.RESPONSES, False, True, 400_000
     ),
     "gpt-5.4": ModelSpec(
         "openai", "gpt-5.4", ApiSurface.RESPONSES, False, True, 400_000
     ),
-    "gpt-5.4-mini": ModelSpec(
-        "openai", "gpt-5.4-mini", ApiSurface.RESPONSES, False, True, 400_000
-    ),
-    "gpt-5.4-nano": ModelSpec(
-        "openai", "gpt-5.4-nano", ApiSurface.RESPONSES, False, True, 400_000
-    ),
-    "deepseek-v4-flash": ModelSpec(
-        "deepseek", "deepseek-v4-flash", ApiSurface.CHAT_COMPLETIONS, True, False, 128_000
-    ),
-    "deepseek-v4-pro": ModelSpec(
-        "deepseek", "deepseek-v4-pro", ApiSurface.CHAT_COMPLETIONS, True, True, 128_000
-    ),
+    # Gemini is the LLM-judge (app/judge.py, app/decision.py) — not a
+    # comparison target, so it's excluded from GUI_COMPARISON_MODELS below.
     "gemini-2.5-pro": ModelSpec(
         "gemini","gemini-2.5-pro", ApiSurface.GEMINI, True, False, 1_048_576
     ),
@@ -97,6 +85,17 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         "gemini", "gemini-2.5-flash", ApiSurface.GEMINI, True, False, 1_048_576
     ),
 }
+
+# Models offered for head-to-head comparison in the GUI (app/gui.py). Narrower
+# than MODEL_REGISTRY: Gemini is judge-only, not a comparison option.
+GUI_COMPARISON_MODELS = (
+    "claude-sonnet-5",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "claude-opus-4-8",
+    "gpt-5.4",
+    "gpt-5.5",
+)
 
 
 class UnknownProviderError(ValueError):
@@ -123,11 +122,24 @@ def _require_env(var: str) -> str:
 
 
 # Output-token budget shared by every adapter. Kept deliberately high because on
-# reasoning models (OpenAI Responses, e.g. gpt-5/o3) this budget is split between
-# reasoning AND the visible answer — too low and reasoning eats it all, leaving an
-# EMPTY response that the judge then scores ~0. Non-reasoning models stop at their
-# natural completion well under this cap, so a high ceiling costs them nothing.
+# reasoning models (OpenAI Responses, e.g. gpt-5.4/gpt-5.5) this budget is split
+# between reasoning AND the visible answer — too low and reasoning eats it all,
+# leaving an EMPTY response that the judge then scores ~0. Non-reasoning models
+# stop at their natural completion well under this cap, so a high ceiling costs
+# them nothing.
 DEFAULT_MAX_TOKENS = 8192
+
+
+def _safe_tokens(usage: Any, in_attr: str, out_attr: str) -> tuple[int, int]:
+    """Read token counts off an SDK `usage` object without ever raising.
+
+    A missing `usage` (or a missing individual field on it) previously bubbled
+    up as an `AttributeError` that dropped an otherwise-successful response
+    row entirely — this makes a metadata gap fall back to 0 instead.
+    """
+    if usage is None:
+        return 0, 0
+    return getattr(usage, in_attr, 0) or 0, getattr(usage, out_attr, 0) or 0
 
 
 class AnthropicAdapter:
@@ -165,11 +177,14 @@ class AnthropicAdapter:
             for block in raw.content
             if getattr(block, "type", "") == "text"
         )
+        tokens_in, tokens_out = _safe_tokens(
+            getattr(raw, "usage", None), "input_tokens", "output_tokens"
+        )
         return LLMResponse(
             content=text,
             reasoning=None,
-            tokens_in=raw.usage.input_tokens,
-            tokens_out=raw.usage.output_tokens,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
             latency_ms=latency_ms,
             model_id=spec.api_id,
             raw=raw,
@@ -184,8 +199,12 @@ class GeminiAdapter:
             temperature: float = 0.0,
     ) -> LLMResponse:
         from google import genai
+        from google.genai import types
 
-        client = genai.Client(api_key=_require_env("GEMINI_API_KEY"))
+        client = genai.Client(
+            api_key=_require_env("GEMINI_API_KEY"),
+            http_options=types.HttpOptions(timeout=int(REQUEST_TIMEOUT_S * 1000)),
+        )
         kwargs: dict[str, Any] = {
             "model": spec.api_id,
             "contents": prompt,
@@ -196,14 +215,19 @@ class GeminiAdapter:
         }
 
         t0 = time.perf_counter()
-        raw = client.models.generate_content(**kwargs)
+        raw = call_with_retry(lambda: client.models.generate_content(**kwargs))
         latency_ms = (time.perf_counter() - t0) * 1000.0
 
+        tokens_in, tokens_out = _safe_tokens(
+            getattr(raw, "usage_metadata", None),
+            "prompt_token_count",
+            "candidates_token_count",
+        )
         return LLMResponse(
-            content=raw.text,
+            content=getattr(raw, "text", None) or "",
             reasoning=None,
-            tokens_in=raw.usage_metadata.prompt_token_count,
-            tokens_out=raw.usage_metadata.candidates_token_count,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
             latency_ms=latency_ms,
             model_id=spec.api_id,
             raw=raw,
@@ -221,7 +245,9 @@ class OpenAIAdapter:
     ) -> LLMResponse:
         import openai
 
-        client = openai.OpenAI(api_key=_require_env("OPENAI_API_KEY"))
+        client = openai.OpenAI(
+            api_key=_require_env("OPENAI_API_KEY"), timeout=REQUEST_TIMEOUT_S
+        )
         if spec.surface == ApiSurface.RESPONSES:
             return self._responses(client, spec, prompt, max_tokens=max_tokens)
         return self._chat(
@@ -232,11 +258,13 @@ class OpenAIAdapter:
         self, client: Any, spec: ModelSpec, prompt: str, *, max_tokens: int
     ) -> LLMResponse:
         t0 = time.perf_counter()
-        raw = client.responses.create(
-            model=spec.api_id,
-            input=prompt,
-            max_output_tokens=max_tokens,
-            reasoning={"effort": "medium"},
+        raw = call_with_retry(
+            lambda: client.responses.create(
+                model=spec.api_id,
+                input=prompt,
+                max_output_tokens=max_tokens,
+                reasoning={"effort": "medium"},
+            )
         )
         latency_ms = (time.perf_counter() - t0) * 1000.0
 
@@ -252,11 +280,14 @@ class OpenAIAdapter:
                             summaries.append(text)
             reasoning = "\n".join(summaries) if summaries else None
 
+        tokens_in, tokens_out = _safe_tokens(
+            getattr(raw, "usage", None), "input_tokens", "output_tokens"
+        )
         return LLMResponse(
             content=content,
             reasoning=reasoning,
-            tokens_in=raw.usage.input_tokens,
-            tokens_out=raw.usage.output_tokens,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
             latency_ms=latency_ms,
             model_id=spec.api_id,
             raw=raw,
@@ -280,61 +311,17 @@ class OpenAIAdapter:
             kwargs["temperature"] = temperature
 
         t0 = time.perf_counter()
-        raw = client.chat.completions.create(**kwargs)
+        raw = call_with_retry(lambda: client.chat.completions.create(**kwargs))
         latency_ms = (time.perf_counter() - t0) * 1000.0
 
+        tokens_in, tokens_out = _safe_tokens(
+            getattr(raw, "usage", None), "prompt_tokens", "completion_tokens"
+        )
         return LLMResponse(
-            content=raw.choices[0].message.content,
+            content=raw.choices[0].message.content or "",
             reasoning=None,
-            tokens_in=raw.usage.prompt_tokens,
-            tokens_out=raw.usage.completion_tokens,
-            latency_ms=latency_ms,
-            model_id=spec.api_id,
-            raw=raw,
-        )
-
-
-class DeepSeekAdapter:
-    """DeepSeek's API is OpenAI-compatible; reuse the OpenAI SDK with a custom base_url."""
-
-    BASE_URL = "https://api.deepseek.com"
-
-    def call(
-        self,
-        spec: ModelSpec,
-        prompt: str,
-        *,
-        max_tokens: int = DEFAULT_MAX_TOKENS,
-        temperature: float = 0.0,
-    ) -> LLMResponse:
-        import openai
-
-        client = openai.OpenAI(
-            api_key=_require_env("DEEPSEEK_API_KEY"),
-            base_url=self.BASE_URL,
-        )
-        kwargs: dict[str, Any] = {
-            "model": spec.api_id,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": max_tokens,
-        }
-        if spec.supports_temperature:
-            kwargs["temperature"] = temperature
-
-        t0 = time.perf_counter()
-        raw = client.chat.completions.create(**kwargs)
-        latency_ms = (time.perf_counter() - t0) * 1000.0
-
-        msg = raw.choices[0].message
-        reasoning: str | None = None
-        if spec.returns_reasoning:
-            reasoning = getattr(msg, "reasoning_content", None)
-
-        return LLMResponse(
-            content=msg.content,
-            reasoning=reasoning,
-            tokens_in=raw.usage.prompt_tokens,
-            tokens_out=raw.usage.completion_tokens,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
             latency_ms=latency_ms,
             model_id=spec.api_id,
             raw=raw,
@@ -344,8 +331,7 @@ class DeepSeekAdapter:
 _ADAPTERS: dict[str, Any] = {
     "anthropic": AnthropicAdapter(),
     "openai": OpenAIAdapter(),
-    "deepseek": DeepSeekAdapter(),
-    "gemini": GeminiAdapter(), 
+    "gemini": GeminiAdapter(),
 }
 
 

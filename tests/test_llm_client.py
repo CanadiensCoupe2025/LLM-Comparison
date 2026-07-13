@@ -27,14 +27,8 @@ def test_registry_lists_all_models():
         "claude-opus-4-8",
         "claude-haiku-4-5",
         "claude-sonnet-5",
-        "gpt-5",
-        "o3",
         "gpt-5.5",
         "gpt-5.4",
-        "gpt-5.4-mini",
-        "gpt-5.4-nano",
-        "deepseek-v4-flash",
-        "deepseek-v4-pro",
         "gemini-2.5-pro",
         "gemini-2.5-flash",
     }
@@ -44,14 +38,14 @@ def test_registry_provider_counts():
     by_provider: dict[str, int] = {}
     for spec in MODEL_REGISTRY.values():
         by_provider[spec.provider] = by_provider.get(spec.provider, 0) + 1
-    # Anthropic: sonnet-4-6/opus-4-8/haiku-4-5/sonnet-5; openai x6 (gpt-5, o3,
-    # gpt-5.5/5.4/5.4-mini/5.4-nano); deepseek x2; gemini pro + flash (judges).
-    assert by_provider == {"anthropic": 4, "openai": 6, "deepseek": 2, "gemini": 2}
+    # Anthropic: sonnet-4-6/opus-4-8/haiku-4-5/sonnet-5; openai x2 (gpt-5.5,
+    # gpt-5.4); gemini pro + flash (judge only, not a comparison model).
+    assert by_provider == {"anthropic": 4, "openai": 2, "gemini": 2}
 
 
 def test_openai_reasoning_models_disable_temperature():
     # gpt-5.x on the Responses surface reject temperature in reasoning mode.
-    for key in ("gpt-5", "o3", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"):
+    for key in ("gpt-5.5", "gpt-5.4"):
         spec = MODEL_REGISTRY[key]
         assert spec.surface == ApiSurface.RESPONSES
         assert spec.supports_temperature is False
@@ -96,7 +90,7 @@ def test_anthropic_messages_api_returns_normalized_response(mock_anthropic_cls):
 
 
 # ---------------------------------------------------------------------------
-# OpenAI — Responses API (gpt-5, o3) happy path
+# OpenAI — Responses API (gpt-5.4/gpt-5.5) happy path
 # ---------------------------------------------------------------------------
 
 
@@ -105,7 +99,7 @@ def test_anthropic_messages_api_returns_normalized_response(mock_anthropic_cls):
 def test_openai_responses_api_surfaces_reasoning_summary(mock_openai_cls):
     mock_client = mock_openai_cls.return_value
     mock_client.responses.create.return_value = SimpleNamespace(
-        output_text="Hello from GPT-5.",
+        output_text="Hello from GPT-5.5.",
         output=[
             SimpleNamespace(
                 type="reasoning",
@@ -115,68 +109,92 @@ def test_openai_responses_api_surfaces_reasoning_summary(mock_openai_cls):
         usage=SimpleNamespace(input_tokens=12, output_tokens=8),
     )
 
-    result = call_llm("openai", "gpt-5", "hi")
+    result = call_llm("openai", "gpt-5.5", "hi")
 
-    assert result.content == "Hello from GPT-5."
+    assert result.content == "Hello from GPT-5.5."
     assert result.reasoning == "Thinking step 1"
     assert result.tokens_in == 12
     assert result.tokens_out == 8
-    assert result.model_id == "gpt-5-2025-08-07"
+    assert result.model_id == "gpt-5.5"
 
     call_kwargs = mock_client.responses.create.call_args.kwargs
-    assert call_kwargs["model"] == "gpt-5-2025-08-07"
+    assert call_kwargs["model"] == "gpt-5.5"
     assert call_kwargs["input"] == "hi"
     assert "temperature" not in call_kwargs  # reasoning models reject temperature
 
 
-# ---------------------------------------------------------------------------
-# DeepSeek — uses the OpenAI SDK against a custom base_url
-# ---------------------------------------------------------------------------
-
-
-@patch.dict(os.environ, {"DEEPSEEK_API_KEY": "test-key"})
+@patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
 @patch("openai.OpenAI")
-def test_deepseek_v4_pro_surfaces_reasoning_content(mock_openai_cls):
+def test_openai_retries_transient_error_then_succeeds(mock_openai_cls):
+    """A transient 429/503 is retried; a later success returns a response."""
     mock_client = mock_openai_cls.return_value
-    mock_message = SimpleNamespace(
-        content="Hello from DeepSeek.",
-        reasoning_content="My internal reasoning",
-    )
-    mock_client.chat.completions.create.return_value = SimpleNamespace(
-        choices=[SimpleNamespace(message=mock_message)],
-        usage=SimpleNamespace(prompt_tokens=20, completion_tokens=12),
-    )
+    calls = {"n": 0}
 
-    result = call_llm("deepseek", "deepseek-v4-pro", "hi")
+    def flaky_create(**kwargs):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("503 UNAVAILABLE: high demand")
+        return SimpleNamespace(
+            output_text="Recovered.",
+            output=[],
+            usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+        )
 
-    assert result.content == "Hello from DeepSeek."
-    assert result.reasoning == "My internal reasoning"
-    assert result.tokens_in == 20
-    assert result.tokens_out == 12
+    mock_client.responses.create.side_effect = flaky_create
 
-    # Confirm the OpenAI client was pointed at DeepSeek's endpoint with the right key.
-    client_kwargs = mock_openai_cls.call_args.kwargs
-    assert client_kwargs["base_url"] == "https://api.deepseek.com"
-    assert client_kwargs["api_key"] == "test-key"
+    with patch("time.sleep"):
+        result = call_llm("openai", "gpt-5.5", "hi")
+
+    assert result.content == "Recovered."
+    assert calls["n"] == 3
 
 
-@patch.dict(os.environ, {"DEEPSEEK_API_KEY": "test-key"})
+@patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
 @patch("openai.OpenAI")
-def test_deepseek_v4_flash_ignores_reasoning_content(mock_openai_cls):
-    """V4-Flash isn't a reasoning model — even if the API emits reasoning_content, drop it."""
+def test_openai_does_not_retry_non_transient_error(mock_openai_cls):
     mock_client = mock_openai_cls.return_value
-    mock_message = SimpleNamespace(
-        content="Plain answer.",
-        reasoning_content="should be ignored",
-    )
-    mock_client.chat.completions.create.return_value = SimpleNamespace(
-        choices=[SimpleNamespace(message=mock_message)],
-        usage=SimpleNamespace(prompt_tokens=5, completion_tokens=2),
-    )
+    calls = {"n": 0}
 
-    result = call_llm("deepseek", "deepseek-v4-flash", "hi")
-    assert result.content == "Plain answer."
-    assert result.reasoning is None
+    def bad_request(**kwargs):
+        calls["n"] += 1
+        raise RuntimeError("400 INVALID_ARGUMENT")
+
+    mock_client.responses.create.side_effect = bad_request
+
+    with pytest.raises(RuntimeError):
+        call_llm("openai", "gpt-5.5", "hi")
+    assert calls["n"] == 1  # no retry
+
+
+# ---------------------------------------------------------------------------
+# Gemini — retry behavior (judge model, called the same way as any adapter)
+# ---------------------------------------------------------------------------
+
+
+@patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"})
+@patch("google.genai.Client")
+def test_gemini_retries_transient_error_then_succeeds(mock_genai_cls):
+    mock_client = mock_genai_cls.return_value
+    calls = {"n": 0}
+
+    def flaky_generate(**kwargs):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("429 RESOURCE_EXHAUSTED")
+        return SimpleNamespace(
+            text="Recovered.",
+            usage_metadata=SimpleNamespace(
+                prompt_token_count=1, candidates_token_count=1
+            ),
+        )
+
+    mock_client.models.generate_content.side_effect = flaky_generate
+
+    with patch("time.sleep"):
+        result = call_llm("gemini", "gemini-2.5-pro", "hi")
+
+    assert result.content == "Recovered."
+    assert calls["n"] == 3
 
 
 # ---------------------------------------------------------------------------

@@ -20,7 +20,7 @@ import os
 import streamlit as st
 
 from app.datasets import Dataset, discover_datasets
-from app.llm_client import MODEL_REGISTRY
+from app.llm_client import GUI_COMPARISON_MODELS
 from app.runner import launch_run
 
 DATASETS_DIR = "evaluator/datasets"
@@ -45,13 +45,13 @@ if not os.environ.get("DATABASE_URL"):
 
 def _label(ds: Dataset) -> str:
     """One-line picker label: name (vN) — K cas — description."""
-    desc = " ".join(((ds.raw.get("dataset") or {}).get("description") or "").split())
+    desc = " ".join(ds.description.split())
     tail = f" — {desc[:60]}…" if desc else ""
     return f"{ds.name} (v{ds.version}) — {len(ds.cases)} cas{tail}"
 
 
 # --- Sélection ---------------------------------------------------------------
-models = st.multiselect("Modèles à comparer", sorted(MODEL_REGISTRY))
+models = st.multiselect("Modèles à comparer", GUI_COMPARISON_MODELS)
 
 datasets = discover_datasets(DATASETS_DIR)
 if not datasets:

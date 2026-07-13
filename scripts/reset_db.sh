@@ -9,8 +9,12 @@
 # Usage (depuis la racine du repo) :
 #   bash scripts/reset_db.sh --today          # runs d'aujourd'hui (tests) + leurs results
 #   bash scripts/reset_db.sh --run 42         # un run précis + ses results
+#   bash scripts/reset_db.sh --dataset d.yaml # tous les runs d'un dataset donné
 #   bash scripts/reset_db.sh --all            # vide runs/results/decisions (base vierge)
 #   ... --yes                                  # saute la confirmation (scripts/CI)
+#
+# Symétrique de scripts/dataset_snapshot.sh (export/restore par dataset) :
+# snapshot d'abord, puis --dataset pour libérer la place.
 #
 # Chaque exécution commence par un pg_dump --clean horodaté dans
 # eval_backups/ ; la commande de restauration est affichée à la fin.
@@ -48,12 +52,21 @@ case "$MODE" in
     WHERE="id = $RUN_ID"
     LABEL="le run #$RUN_ID"
     ;;
+  --dataset)
+    DS="${2:-}"
+    if [[ -z "$DS" ]]; then
+      echo "usage: bash scripts/reset_db.sh --dataset <nom-de-dataset>" >&2; exit 2
+    fi
+    DS_ESC="${DS//\'/\'\'}"       # échappe les apostrophes pour le SQL
+    WHERE="dataset = '$DS_ESC'"
+    LABEL="les runs du dataset « $DS »"
+    ;;
   --all)
     WHERE=""
     LABEL="TOUTES les données (runs, results, decisions)"
     ;;
   *)
-    echo "usage: bash scripts/reset_db.sh --today | --run <id> | --all [--yes]" >&2
+    echo "usage: bash scripts/reset_db.sh --today | --run <id> | --dataset <nom> | --all [--yes]" >&2
     exit 2
     ;;
 esac

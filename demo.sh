@@ -21,7 +21,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
 
 DATASET="evaluator/datasets/demo_v1.yaml"
-MODELS=(claude-sonnet-4-6 claude-opus-4-8 gpt-5 o3)
+MODELS=(claude-sonnet-4-6 claude-opus-4-8 gpt-5.4 gpt-5.5)
 
 # Colors — bail to plain text if not a TTY.
 if [[ -t 1 ]]; then
@@ -67,9 +67,6 @@ step "API keys present in environment"
 [[ -n "${ANTHROPIC_API_KEY:-}" ]] || die "ANTHROPIC_API_KEY not set in .env"
 [[ -n "${OPENAI_API_KEY:-}"    ]] || die "OPENAI_API_KEY not set in .env"
 ok "ANTHROPIC_API_KEY and OPENAI_API_KEY loaded"
-if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
-  warn "DEEPSEEK_API_KEY not set — DeepSeek models skipped (registry-ready, just gated by missing key)."
-fi
 
 step "Python venv + deps"
 if [[ ! -d .venv ]]; then
