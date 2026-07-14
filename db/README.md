@@ -86,6 +86,21 @@ SELECT * FROM run_metrics ORDER BY started_at DESC LIMIT 10;
 SELECT dataset, AVG(total_cost) FROM run_metrics GROUP BY dataset;
 ```
 
+### `complete_cases` (migration 022)
+Les paires (run_id, case_id) comparables entre TOUS les modèles du run :
+sur un run jugé, chaque modèle participant doit avoir ≥ 1 ligne notée pour
+le cas ; sur un run non jugé, ≥ 1 ligne. Un appel modèle en échec ne laisse
+AUCUNE ligne dans `results`, donc sans ce filtre chaque modèle était moyenné
+sur un jeu de questions différent.
+
+### `model_metrics` (008, réécrite par 021 puis 022)
+Agrégat par (modèle, run) pour le dashboard `llm_model_comparison` —
+**cas complets uniquement** (jointure sur `complete_cases`). Colonnes :
+`model`, `n_results`, `avg_latency_ms`, `total_cost`, `avg_judge_score`,
+`n_cases`, `stddev_judge_score`, `n_judged` (022 — masque l'écart-type sans
+échantillonnage répété : `n_judged > n_cases`), `avg_total_tokens` (022 —
+tokens in+out moyens par réponse), `run_id` (toujours en dernier).
+
 ## How to run
 
 Apply the base schema (creates all 4 tables):

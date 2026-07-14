@@ -127,3 +127,33 @@ def test_launch_run_unknown_model_raises(tmp_path, monkeypatch) -> None:
     with pytest.raises(ValueError, match="Unknown model key"):
         runner.launch_run(_dataset_file(tmp_path), ["nope-not-a-model"])
     conn.close.assert_called_once()
+
+
+def test_launch_run_auto_decides_when_judged(tmp_path, monkeypatch) -> None:
+    """do_judge=True → the per-profile decision is recorded automatically,
+    against the same open connection and the new run id (GUI path)."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x@localhost/y")
+    conn, _ = _mock_db(monkeypatch, prompt_row=MagicMock(id=7, content="SYS"))
+    monkeypatch.setattr(runner, "execute_run", lambda **k: MagicMock())
+
+    decide_mock = MagicMock(return_value=[])
+    monkeypatch.setattr(runner, "decide_run", decide_mock)
+
+    runner.launch_run(
+        _dataset_file(tmp_path), ["claude-haiku-4-5"], do_judge=True
+    )
+
+    decide_mock.assert_called_once_with(conn, 42)
+
+
+def test_launch_run_no_auto_decide_when_unjudged(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x@localhost/y")
+    _mock_db(monkeypatch, prompt_row=MagicMock(id=7, content="SYS"))
+    monkeypatch.setattr(runner, "execute_run", lambda **k: MagicMock())
+
+    decide_mock = MagicMock(return_value=[])
+    monkeypatch.setattr(runner, "decide_run", decide_mock)
+
+    runner.launch_run(_dataset_file(tmp_path), ["claude-haiku-4-5"])
+
+    decide_mock.assert_not_called()

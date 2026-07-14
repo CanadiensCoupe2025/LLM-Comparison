@@ -5,12 +5,15 @@
 # Walks through the maximum surface delivered by epic SCRUM-10:
 #   1. Preflight  — Postgres health + required API keys
 #   2. Prompts    — sync versioned YAML prompts into the DB
-#   3. Runner     — parallel multi-model evaluation, persisted
-#   4. Aggregate  — per-model + per-run summary from SQL
+#   3. Runner     — parallel multi-model evaluation, judged (Gemini),
+#                   3 samples per (case, model) → mean ± stddev, then
+#                   the per-profile final decision (auto, SCRUM-38)
+#   4. Aggregate  — per-model + per-run summary + decision from SQL
 #
-# Cost : ~15-20 cents per run (reasoning models o3/gpt-5 dominate;
-#        Sonnet alone is sub-cent — see the per-model breakdown).
-# Wall : ~10-15 seconds (bounded by the slowest model, not the sum).
+# Cost : ~50-75 cents per run (3 samples × reasoning models dominate;
+#        the Gemini judge/decision calls are cents).
+# Wall : ~2-4 minutes (model calls are parallel; judge calls are
+#        sequential on the main thread — 72 of them at 3 samples).
 #
 # Run it from the repo root:
 #   bash demo.sh
@@ -66,7 +69,8 @@ ok "container llmcomp_postgres is healthy"
 step "API keys present in environment"
 [[ -n "${ANTHROPIC_API_KEY:-}" ]] || die "ANTHROPIC_API_KEY not set in .env"
 [[ -n "${OPENAI_API_KEY:-}"    ]] || die "OPENAI_API_KEY not set in .env"
-ok "ANTHROPIC_API_KEY and OPENAI_API_KEY loaded"
+[[ -n "${GEMINI_API_KEY:-}"    ]] || die "GEMINI_API_KEY not set in .env (juge + décision finale)"
+ok "ANTHROPIC_API_KEY, OPENAI_API_KEY and GEMINI_API_KEY loaded"
 
 step "Python venv + deps"
 if [[ ! -d .venv ]]; then
@@ -82,11 +86,12 @@ step "python -m app.prompts.cli sync"
 python -m app.prompts.cli sync | sed 's/^/    /'
 
 # ─── 3. Run the evaluation ───────────────────────────────────
-banner "3/4  Parallel multi-model run (SCRUM-19 + SCRUM-22)"
+banner "3/4  Parallel multi-model run, judged (SCRUM-19/22/23/38)"
+SAMPLES=3
 printf '%sDataset%s  %s\n' "$C_DIM" "$C_OFF" "$DATASET"
 printf '%sModels%s   %s\n' "$C_DIM" "$C_OFF" "${MODELS[*]}"
-printf '%sFan-out%s  %d cases × %d models = %d parallel calls\n' \
-  "$C_DIM" "$C_OFF" 6 "${#MODELS[@]}" $((6 * ${#MODELS[@]}))
+printf '%sFan-out%s  %d cases × %d models × %d samples = %d calls (+ jugement Gemini)\n' \
+  "$C_DIM" "$C_OFF" 6 "${#MODELS[@]}" "$SAMPLES" $((6 * ${#MODELS[@]} * SAMPLES))
 echo
 
 step "Cases under evaluation (from $DATASET)"
@@ -104,7 +109,8 @@ PY
 echo
 
 START_TS=$(date +%s)
-python runner.py --dataset "$DATASET" --models "${MODELS[@]}" --max-workers 12
+python runner.py --dataset "$DATASET" --models "${MODELS[@]}" --max-workers 12 \
+  --judge --samples "$SAMPLES" --temperature 0.7
 WALL=$(( $(date +%s) - START_TS ))
 echo
 ok "wall time: ${WALL}s"
@@ -161,6 +167,13 @@ step "Run-level aggregates from the run_metrics view (migration 004)"
     FROM run_metrics
    ORDER BY run_id DESC LIMIT 5;"
 
+step "Décision finale par profil (SCRUM-38 — auto après un run jugé)"
+"${PSQL[@]}" -c "
+  SELECT profile, recommended_model, confidence
+    FROM decision_by_profile
+   WHERE run_id = (SELECT MAX(id) FROM runs)
+   ORDER BY profile;"
+
 banner "Demo complete"
-printf '%sNext sprint:%s LLM-as-judge (SCRUM-23), Grafana dashboard (SCRUM-30),\n' "$C_DIM" "$C_OFF"
-printf '             CI evaluation gate (SCRUM-25).\n\n'
+printf '%sDashboards:%s http://localhost:3000 — LLM Model Comparison,\n' "$C_DIM" "$C_OFF"
+printf '            LLM Final Decision, LLM Quality Triage (run le plus récent).\n\n'

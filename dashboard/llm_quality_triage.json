@@ -118,50 +118,6 @@
         ]
       },
       "options": { "showHeader": true, "sortBy": [{ "displayName": "n_sous_5", "desc": true }] }
-    },
-    {
-      "id": 3,
-      "type": "table",
-      "title": "Détail — réponses notées <= $max_score (triées par note croissante)",
-      "description": "Chaque réponse non parfaite : note, type d'échec déduit, question, réponse complète et justification du juge. Trier/filtrer par colonne. Source: vue result_review.",
-      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-      "gridPos": { "h": 16, "w": 24, "x": 0, "y": 9 },
-      "targets": [
-        {
-          "refId": "A",
-          "format": "table",
-          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT judge_score AS note, model, failure_type AS type_echec, case_id, question, response, judge_reasoning FROM result_review WHERE run_id = $run AND (judge_score <= $max_score OR judge_score IS NULL) AND model IN ($model) ORDER BY judge_score ASC NULLS FIRST, model LIMIT 500;"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": { "align": "left", "cellOptions": { "type": "auto", "wrapText": true }, "inspect": true, "filterable": true, "minWidth": 80 }
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "note" },
-            "properties": [
-              { "id": "custom.width", "value": 70 },
-              { "id": "min", "value": 0 }, { "id": "max", "value": 5 },
-              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
-              { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "value": null, "color": "red" }, { "value": 2.5, "color": "orange" }, { "value": 4, "color": "green" } ] } }
-            ]
-          },
-          { "matcher": { "id": "byName", "options": "model" }, "properties": [{ "id": "custom.width", "value": 150 }] },
-          { "matcher": { "id": "byName", "options": "type_echec" }, "properties": [{ "id": "custom.width", "value": 170 }] },
-          { "matcher": { "id": "byName", "options": "case_id" }, "properties": [{ "id": "custom.width", "value": 150 }] },
-          { "matcher": { "id": "byName", "options": "question" }, "properties": [{ "id": "custom.width", "value": 320 }] },
-          { "matcher": { "id": "byName", "options": "response" }, "properties": [{ "id": "custom.width", "value": 430 }] },
-          { "matcher": { "id": "byName", "options": "judge_reasoning" }, "properties": [{ "id": "custom.width", "value": 430 }] }
-        ]
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "md",
-        "footer": { "show": false, "reducer": ["sum"], "countRows": false, "fields": "" },
-        "sortBy": [{ "displayName": "note", "desc": false }]
-      }
     }
   ]
 }

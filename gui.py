@@ -68,10 +68,11 @@ col1, col2 = st.columns(2)
 with col1:
     do_judge = st.checkbox(
         "Juger avec Gemini (score 0–5)",
-        value=False,
-        help="Chaque réponse est notée par le juge LLM (SCRUM-23) et alimente "
-        "les dashboards qualité. Un appel Gemini par réponse — plus lent, un "
-        "peu plus cher.",
+        value=True,
+        help="Chaque réponse est notée par le juge LLM (SCRUM-23), alimente "
+        "les dashboards qualité et déclenche la décision finale par profil "
+        "(dashboard « LLM Final Decision »). Un appel Gemini par réponse — "
+        "plus lent, un peu plus cher. Décoche pour un smoke test rapide.",
     )
 with col2:
     samples = st.number_input(
@@ -109,13 +110,20 @@ if st.button("▶ Run", type="primary"):
         f"coût ~${outcome.total_cost:.4f}."
     )
     # Judged run: surface the per-model mean ± stddev right in the GUI.
+    # n=1 → « n/a » : un tirage unique n'a pas d'écart-type d'échantillonnage.
     stats = outcome.model_score_stats()
     if stats:
         st.markdown("**Score juge (0–5), moyenne ± écart-type :**")
         for model_key in sorted(stats):
             mean, stddev, n = stats[model_key]
-            st.markdown(f"- `{model_key}` : **{mean:.2f}** ± {stddev:.2f} (n={n})")
+            spread = f"± {stddev:.2f}" if n > 1 else "± n/a"
+            st.markdown(f"- `{model_key}` : **{mean:.2f}** {spread} (n={n})")
     st.markdown(
         f"→ Ouvre **[Grafana]({GRAFANA_URL})** (dashboard *llm_model_comparison*) "
         "pour comparer latence / qualité / coût par modèle."
     )
+    if do_judge:
+        st.markdown(
+            f"→ **Décision finale par profil** enregistrée — ouvre "
+            f"**[LLM Final Decision]({GRAFANA_URL}/d/llm-final-decision)**."
+        )

@@ -29,7 +29,7 @@ flowchart LR
 
     subgraph DOCKER["Docker Compose"]
         PG[("PostgreSQL 16\n:5432 — runs/results/\nmodels/prompts/decisions")]
-        GRAF["Grafana 11 :3000\n5 dashboards provisionnés"]
+        GRAF["Grafana 11 :3000\n4 dashboards provisionnés"]
         APP["app (idle en local —\nimage cible Azure)"]
     end
 
@@ -110,6 +110,8 @@ python runner.py --dataset evaluator/datasets/demo_v1.yaml \
 bash judge.sh claude-sonnet-4-6 gpt-5
 
 # Décision finale par profil d'usage (SCRUM-38)
+# Automatique après chaque run jugé (--judge), tous profils ; --no-decide
+# côté runner pour sauter. La CLI reste pour re-décider un ancien run :
 python -m app.decide --all-profiles            # ou --profile etudiant, --force
 
 # Nettoyer les runs de test (backup automatique AVANT toute suppression)
@@ -124,7 +126,7 @@ docker compose exec -T postgres psql -U llm -d llm_eval \
 
 Dashboards Grafana (http://localhost:3000, provisionnés par fichiers —
 versionnés dans `dashboard/`) : `llm_model_comparison`, `llm_final_decision`,
-`llm_quality_triage`, `llm_style_benchmark`, `llm_style_control`.
+`llm_quality_triage`, `llm_style_benchmark`.
 
 ---
 
@@ -158,6 +160,8 @@ versionnés dans `dashboard/`) : `llm_model_comparison`, `llm_final_decision`,
 | Port 8501/3000/5432 occupé | Autre instance/service | `lsof -i :8501` puis tuer le processus, ou changer le port |
 | Écran « Welcome to Streamlit » qui bloque | Onboarding premier lancement | `printf '[general]\nemail = ""\n' > ~/.streamlit/credentials.toml` |
 | Dashboards « pollués » par des runs d'essai | Données de test en base | `bash scripts/reset_db.sh --today` (les dashboards ne stockent rien) |
+| Dashboard « LLM Final Decision » vide | Run non jugé, ou juge en échec total (auto-decide sauté) | Relancer avec `--judge`, ou `python -m app.decide --run N` sur un run déjà jugé |
+| Comparaison vide malgré des résultats en base | Aucun cas complet (un modèle a échoué partout → filtre cas-complets, migration 022) | `SELECT * FROM complete_cases WHERE run_id = N;` pour diagnostiquer ; relancer le modèle en échec |
 
 ### 4.3 Sauvegarde / restauration
 
