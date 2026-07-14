@@ -91,8 +91,9 @@ def _decide_one(
     rubric: str,
     judge_model: str,
     force: bool,
+    run_id: Optional[int],
 ) -> None:
-    h_in = input_hash(metrics, profile)
+    h_in = input_hash(metrics, profile, run_id)
     if not force:
         cached = repo.find_decision(input_hash=h_in, prompt_id=prompt_id, profile=profile.name)
         if cached is not None:
@@ -119,6 +120,7 @@ def _decide_one(
         input_snapshot=json.loads(canonical_metrics(metrics)),
         profile=profile.name,
         weighted_scores=decision.weighted_scores,
+        run_id=run_id,
     )
     _print_decision(decision, replayed=False)
 
@@ -137,6 +139,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         "--all-profiles",
         action="store_true",
         help="Decide for every profile in decision_profiles.yaml.",
+    )
+    parser.add_argument(
+        "--run",
+        type=int,
+        default=None,
+        help="Run id to decide over (default: the most recent run). Scopes the "
+             "metrics so the decision reflects only that test's models.",
     )
     parser.add_argument(
         "--force",
@@ -166,18 +175,27 @@ def main(argv: Optional[list[str]] = None) -> int:
         repo = PostgresResultsRepository(conn)
         prompt_repo = PostgresPromptRepository(conn)
 
-        metrics = repo.fetch_decision_metrics()
+        run_id = args.run if args.run is not None else repo.latest_run_id()
+        if run_id is None:
+            log.error("no runs in the database — run an eval first.")
+            return EXIT_NO_DATA
+
+        metrics = repo.fetch_decision_metrics(run_id)
         if not metrics:
             log.error(
-                "no judged results in `model_decision_metrics` — "
-                "run with --judge first."
+                "no judged results for run #%s in `model_decision_metrics` — "
+                "run with --judge first (or pick another --run).",
+                run_id,
             )
             return EXIT_NO_DATA
 
         prompt_id = _resolve_prompt_id(prompt_repo)
         rubric = load_decision_prompt().content
         for profile in profiles:
-            _decide_one(repo, metrics, profile, prompt_id, rubric, args.model, args.force)
+            _decide_one(
+                repo, metrics, profile, prompt_id, rubric, args.model,
+                args.force, run_id,
+            )
         return EXIT_OK
     finally:
         conn.close()

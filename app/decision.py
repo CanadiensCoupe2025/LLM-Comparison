@@ -21,14 +21,14 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 from app.decision_scoring import ScoredModel, confidence_from_margin, rank_models
-from app.judge import _is_retryable  # transient-error policy shared with the judge
 from app.llm_client import LLMResponse, call_llm
 from app.profiles import Profile, profile_fingerprint
 from app.prompts.hasher import compute_hash
 from app.prompts.loader import Prompt, load_prompt
+from app.retry import call_with_retry
 
 DECISION_PROMPT_PATH = Path(__file__).parent / "prompts" / "templates" / "final_decision.yaml"
 
@@ -67,13 +67,23 @@ def canonical_metrics(metrics: Sequence[dict]) -> str:
     return json.dumps(rows, sort_keys=True, default=str, ensure_ascii=False)
 
 
-def input_hash(metrics: Sequence[dict], profile: Profile) -> str:
-    """SHA-256 over the metrics AND the profile (name + weights).
+def input_hash(
+    metrics: Sequence[dict], profile: Profile, run_id: Optional[int] = None
+) -> str:
+    """SHA-256 over the metrics, the profile (name + weights), AND the run.
 
     Same metrics but a different profile → different hash → different cached
     decision. Same everything → cache hit → the stored decision is replayed.
+    Folding in `run_id` keeps two runs that happen to have identical metric
+    snapshots from colliding on the same cached decision.
     """
-    payload = canonical_metrics(metrics) + "\x1e" + profile_fingerprint(profile)
+    payload = (
+        canonical_metrics(metrics)
+        + "\x1e"
+        + profile_fingerprint(profile)
+        + "\x1e"
+        + ("" if run_id is None else str(run_id))
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -155,24 +165,20 @@ def decide(
     rubric = rubric if rubric is not None else load_decision_prompt().content
     prompt = build_justification_prompt(rubric, metrics, profile, scored)
 
-    attempt = 0
-    while True:
-        try:
-            response = call("gemini", model, prompt, max_tokens=max_tokens)
-        except Exception as e:
-            attempt += 1
-            if attempt > max_retries or not _is_retryable(e):
-                raise
-            sleep(backoff_base ** attempt)
-            continue
-        justification = parse_justification(response.content)
-        return Decision(
-            recommended_model=recommended.model,
-            confidence=confidence,
-            profile=profile.name,
-            determinant_metrics=justification["determinant_metrics"],
-            tradeoffs=justification["tradeoffs"],
-            reasoning=justification["reasoning"],
-            weighted_scores=_ranking_table(scored),
-            response=response.content,
-        )
+    response = call_with_retry(
+        lambda: call("gemini", model, prompt, max_tokens=max_tokens),
+        max_retries=max_retries,
+        backoff_base=backoff_base,
+        sleep=sleep,
+    )
+    justification = parse_justification(response.content)
+    return Decision(
+        recommended_model=recommended.model,
+        confidence=confidence,
+        profile=profile.name,
+        determinant_metrics=justification["determinant_metrics"],
+        tradeoffs=justification["tradeoffs"],
+        reasoning=justification["reasoning"],
+        weighted_scores=_ranking_table(scored),
+        response=response.content,
+    )

@@ -88,10 +88,10 @@ jobs:
       - name: Eval regression gate (real, cheap)
         # 1 case x 2 models x 1 sample + Gemini judge ~= a few cents.
         # Exits 5 (pipeline fails) if any model's mean judge score < 3.5/5.
-        # gpt-5 ignores --temperature (supports_temperature=False in the
+        # gpt-5.4 ignores --temperature (supports_temperature=False in the
         # registry); it only applies to claude-haiku-4-5.
         run: |
           python -m app.runner \
             --dataset evaluator/datasets/sprint1_smoke.yaml \
-            --models claude-haiku-4-5 gpt-5 \
+            --models claude-haiku-4-5 gpt-5.4 \
             --judge --samples 1 --temperature 0 --fail-under 3.5

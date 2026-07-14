@@ -27,6 +27,7 @@ class DecisionRow:
     profile: Optional[str]
     weighted_scores: Optional[list]
     created_at: datetime
+    run_id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,8 @@ class ResultsRepository(Protocol):
     def lookup_model(self, name: str) -> ModelRow: ...
 
     def create_run(self, prompt_id: int, dataset: str) -> int: ...
+
+    def latest_run_id(self) -> Optional[int]: ...
 
     def update_judge(
         self, *, result_id: int, judge_score: Decimal, judge_reasoning: str
@@ -94,11 +97,12 @@ class ResultsRepository(Protocol):
         input_snapshot: Any,
         profile: Optional[str] = None,
         weighted_scores: Optional[list] = None,
+        run_id: Optional[int] = None,
     ) -> DecisionRow: ...
 
     def latest_decision(self) -> Optional[DecisionRow]: ...
 
-    def fetch_decision_metrics(self) -> list[dict]: ...
+    def fetch_decision_metrics(self, run_id: int) -> list[dict]: ...
 
 
 class PostgresResultsRepository:
@@ -147,6 +151,13 @@ class PostgresResultsRepository:
             run_id = cur.fetchone()[0]
         self.conn.commit()
         return run_id
+
+    def latest_run_id(self) -> Optional[int]:
+        """Id of the most recent run, or None if no runs exist yet."""
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT MAX(id) FROM runs")
+            row = cur.fetchone()
+        return row[0] if row else None
 
     def insert_result(
         self,
@@ -238,7 +249,8 @@ class PostgresResultsRepository:
     # All SELECTs share this column list so DecisionRow mapping stays in sync.
     _DECISION_COLS = (
         "id, recommended_model, confidence, determinant_metrics, tradeoffs, "
-        "reasoning, prompt_id, input_hash, profile, weighted_scores, created_at"
+        "reasoning, prompt_id, input_hash, profile, weighted_scores, created_at, "
+        "run_id"
     )
 
     def find_decision(
@@ -272,6 +284,7 @@ class PostgresResultsRepository:
         input_snapshot: Any,
         profile: Optional[str] = None,
         weighted_scores: Optional[list] = None,
+        run_id: Optional[int] = None,
     ) -> DecisionRow:
         with self.conn.cursor() as cur:
             cur.execute(
@@ -279,8 +292,8 @@ class PostgresResultsRepository:
                 INSERT INTO decisions
                     (recommended_model, confidence, determinant_metrics,
                      tradeoffs, reasoning, prompt_id, input_hash, input_snapshot,
-                     profile, weighted_scores)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     profile, weighted_scores, run_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING {self._DECISION_COLS}
                 """,
                 (
@@ -294,6 +307,7 @@ class PostgresResultsRepository:
                     Jsonb(input_snapshot),
                     profile,
                     Jsonb(weighted_scores) if weighted_scores is not None else None,
+                    run_id,
                 ),
             )
             row = self._decision_row(cur.fetchone())
@@ -312,13 +326,19 @@ class PostgresResultsRepository:
             )
             return self._decision_row(cur.fetchone())
 
-    def fetch_decision_metrics(self) -> list[dict]:
-        """Read the `model_decision_metrics` view as a list of plain dicts.
+    def fetch_decision_metrics(self, run_id: int) -> list[dict]:
+        """Read the `model_decision_metrics` view for ONE run, as plain dicts.
 
-        Decimals are kept as-is; app/decision.py canonicalises them for hashing.
+        Scoped to `run_id` so a decision reflects only the models in that test
+        (not every model ever judged). Decimals are kept as-is; app/decision.py
+        canonicalises them for hashing.
         """
         with self.conn.cursor() as cur:
-            cur.execute("SELECT * FROM model_decision_metrics ORDER BY model")
+            cur.execute(
+                "SELECT * FROM model_decision_metrics WHERE run_id = %s "
+                "ORDER BY model",
+                (run_id,),
+            )
             cols = [c.name for c in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
 
@@ -338,4 +358,5 @@ class PostgresResultsRepository:
             profile=r[8],
             weighted_scores=r[9],
             created_at=r[10],
+            run_id=r[11],
         )

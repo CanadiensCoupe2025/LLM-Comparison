@@ -20,26 +20,13 @@ from typing import Any, Callable
 from app.llm_client import LLMResponse, call_llm
 from app.logging_setup import get_logger
 from app.prompts.loader import load_prompt
+from app.retry import call_with_retry
 
 log = get_logger(__name__)
 
 class JudgeParseError(ValueError):
     """Raised when the judge score is not valid, in-range verdict JSON"""
 
-
-# Transient API failures worth retrying: rate limit (429) and server
-# overload (503). Detected by status code if present, else by message
-# markers — provider-agnostic, no hard dependency on the SDK's error types.
-_RETRYABLE_STATUS = (429, 503)
-_RETRYABLE_MARKERS = ("429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE")
-
-
-def _is_retryable(exc: Exception) -> bool:
-    """True for transient API errors (HTTP 429/503) worth retrying."""
-    if getattr(exc, "code", None) in _RETRYABLE_STATUS:
-        return True
-    msg = str(exc)
-    return any(marker in msg for marker in _RETRYABLE_MARKERS)
 
 @dataclass(frozen=True)
 class JudgeVerdict:
@@ -111,25 +98,25 @@ def judge(
     """
     rubric = rubric or load_rubric()
     prompt = build_judge_prompt(rubric, question, answer)
-    attempt = 0
-    while True:
-        try:
-            response = call("gemini", model, prompt, max_tokens=max_tokens)
-        except Exception as e:
-            attempt += 1
-            if attempt > max_retries or not _is_retryable(e):
-                raise
-            log.warning(
-                "judge call transient error, retrying (%d/%d): %s: %s",
-                attempt,
-                max_retries,
-                type(e).__name__,
-                e,
-                extra={"model": model},
-            )
-            sleep(backoff_base ** attempt)
-            continue
-        return parse_verdict(response.content)
+
+    def on_retry(attempt: int, e: Exception) -> None:
+        log.warning(
+            "judge call transient error, retrying (%d/%d): %s: %s",
+            attempt,
+            max_retries,
+            type(e).__name__,
+            e,
+            extra={"model": model},
+        )
+
+    response = call_with_retry(
+        lambda: call("gemini", model, prompt, max_tokens=max_tokens),
+        max_retries=max_retries,
+        backoff_base=backoff_base,
+        sleep=sleep,
+        on_retry=on_retry,
+    )
+    return parse_verdict(response.content)
 
 
 

@@ -808,7 +808,7 @@ def test_parse_args_accepts_temperature_and_max_workers():
     args = _parse_args(
         [
             "--dataset", "x.yaml",
-            "--models", "claude-sonnet-4-6", "gpt-5",
+            "--models", "claude-sonnet-4-6", "gpt-5.4",
             "--max-workers", "12",
             "--temperature", "0.7",
             "--samples", "5",
@@ -817,7 +817,7 @@ def test_parse_args_accepts_temperature_and_max_workers():
     assert args.max_workers == 12
     assert args.temperature == 0.7
     assert args.samples == 5
-    assert args.models == ["claude-sonnet-4-6", "gpt-5"]
+    assert args.models == ["claude-sonnet-4-6", "gpt-5.4"]
 
 
 def test_parse_args_samples_defaults_to_high():

@@ -8,6 +8,21 @@
   "time": { "from": "now-30d", "to": "now" },
   "timezone": "browser",
   "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "run",
+        "label": "Run (test)",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+        "query": "SELECT id AS __value, dataset || ' #' || id AS __text FROM runs ORDER BY id DESC",
+        "refresh": 2,
+        "includeAll": false,
+        "multi": false,
+        "sort": 0
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
@@ -31,7 +46,7 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT model, n_judged, corr_score_len, corr_score_headers, corr_score_bold, corr_score_lists\nFROM style_confound\nORDER BY corr_score_len DESC NULLS LAST;"
+          "rawSql": "SELECT model, n_judged, corr_score_len, corr_score_headers, corr_score_bold, corr_score_lists\nFROM style_confound\nWHERE run_id = $run\nORDER BY corr_score_len DESC NULLS LAST;"
         }
       ],
       "fieldConfig": {
@@ -63,7 +78,7 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT m.name AS model,\n       AVG(res.judge_score)::NUMERIC(3,1)               AS avg_judge,\n       AVG(res.output_tokens)::INT                      AS avg_tokens,\n       AVG(res.resp_style_headers)::NUMERIC(5,1)        AS avg_headers,\n       AVG(res.resp_style_bold)::NUMERIC(5,1)           AS avg_bold,\n       AVG(res.resp_style_ordered + res.resp_style_unordered)::NUMERIC(5,1) AS avg_list_items\nFROM results res JOIN models m ON m.id = res.model_id\nWHERE res.judge_score IS NOT NULL AND res.resp_style_headers IS NOT NULL\nGROUP BY m.name\nORDER BY avg_judge DESC;"
+          "rawSql": "SELECT m.name AS model,\n       AVG(res.judge_score)::NUMERIC(3,1)               AS avg_judge,\n       AVG(res.output_tokens)::INT                      AS avg_tokens,\n       AVG(res.resp_style_headers)::NUMERIC(5,1)        AS avg_headers,\n       AVG(res.resp_style_bold)::NUMERIC(5,1)           AS avg_bold,\n       AVG(res.resp_style_ordered + res.resp_style_unordered)::NUMERIC(5,1) AS avg_list_items\nFROM results res JOIN models m ON m.id = res.model_id\nWHERE res.run_id = $run AND res.judge_score IS NOT NULL AND res.resp_style_headers IS NOT NULL\nGROUP BY m.name\nORDER BY avg_judge DESC;"
         }
       ],
       "fieldConfig": {

@@ -8,6 +8,21 @@
   "time": { "from": "now-30d", "to": "now" },
   "timezone": "browser",
   "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "run",
+        "label": "Run (test)",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+        "query": "SELECT id AS __value, dataset || ' #' || id AS __text FROM runs ORDER BY id DESC",
+        "refresh": 2,
+        "includeAll": false,
+        "multi": false,
+        "sort": 0
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
@@ -21,7 +36,7 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT model, avg_judge_score\nFROM model_metrics\nWHERE avg_judge_score IS NOT NULL\nORDER BY avg_judge_score DESC;"
+          "rawSql": "SELECT model, avg_judge_score\nFROM model_metrics\nWHERE run_id = $run AND avg_judge_score IS NOT NULL\nORDER BY avg_judge_score DESC;"
         }
       ],
       "fieldConfig": {
@@ -69,7 +84,7 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT\n  res.created_at      AS \"created_at\",\n  res.case_id         AS \"case_id\",\n  m.name              AS \"model\",\n  res.prompt_style    AS \"prompt_style\",\n  res.question        AS \"question\",\n  res.response        AS \"response\",\n  res.judge_score     AS \"judge_score\",\n  res.judge_reasoning AS \"judge_reasoning\"\nFROM results res\nJOIN models m ON m.id = res.model_id\nORDER BY res.created_at DESC\nLIMIT 500;"
+          "rawSql": "SELECT\n  res.created_at      AS \"created_at\",\n  res.case_id         AS \"case_id\",\n  m.name              AS \"model\",\n  res.prompt_style    AS \"prompt_style\",\n  res.question        AS \"question\",\n  res.response        AS \"response\",\n  res.judge_score     AS \"judge_score\",\n  res.judge_reasoning AS \"judge_reasoning\"\nFROM results res\nJOIN models m ON m.id = res.model_id\nWHERE res.run_id = $run\nORDER BY res.created_at DESC\nLIMIT 500;"
         }
       ],
       "fieldConfig": {

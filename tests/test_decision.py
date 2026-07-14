@@ -62,6 +62,13 @@ def test_input_hash_changes_when_a_weight_changes():
     assert input_hash(METRICS, P_FAST) != input_hash(METRICS, tweaked)
 
 
+def test_input_hash_changes_with_run_id():
+    # Same metrics + profile but a different run must not collide in the cache.
+    assert input_hash(METRICS, P_FAST, 1) != input_hash(METRICS, P_FAST, 2)
+    # Back-compat: omitting run_id stays stable (None).
+    assert input_hash(METRICS, P_FAST) == input_hash(METRICS, P_FAST, None)
+
+
 def test_canonical_metrics_is_deterministic_and_sorted_by_model():
     import json
     once = canonical_metrics(METRICS)

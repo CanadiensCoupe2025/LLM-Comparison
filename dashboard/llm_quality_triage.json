@@ -11,6 +11,17 @@
   "templating": {
     "list": [
       {
+        "name": "run",
+        "label": "Run (test)",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+        "query": "SELECT id AS __value, dataset || ' #' || id AS __text FROM runs ORDER BY id DESC",
+        "refresh": 2,
+        "includeAll": false,
+        "multi": false,
+        "sort": 0
+      },
+      {
         "name": "max_score",
         "label": "Note max affichée",
         "type": "custom",
@@ -31,7 +42,7 @@
         "label": "Modèle",
         "type": "query",
         "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-        "query": "SELECT DISTINCT model FROM result_review ORDER BY 1",
+        "query": "SELECT DISTINCT model FROM result_review WHERE run_id = $run ORDER BY 1",
         "refresh": 2,
         "includeAll": true,
         "multi": true,
@@ -52,7 +63,7 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT failure_type, count(*) FILTER (WHERE model = 'claude-haiku-4-5') AS \"claude-haiku-4-5\", count(*) FILTER (WHERE model = 'claude-sonnet-4-6') AS \"claude-sonnet-4-6\", count(*) FILTER (WHERE model = 'gpt-5') AS \"gpt-5\" FROM result_review WHERE (judge_score <= $max_score OR judge_score IS NULL) AND model IN ($model) GROUP BY failure_type ORDER BY 1;"
+          "rawSql": "SELECT failure_type, count(*) FILTER (WHERE model = 'claude-haiku-4-5') AS \"claude-haiku-4-5\", count(*) FILTER (WHERE model = 'claude-sonnet-4-6') AS \"claude-sonnet-4-6\", count(*) FILTER (WHERE model = 'gpt-5') AS \"gpt-5\" FROM result_review WHERE run_id = $run AND (judge_score <= $max_score OR judge_score IS NULL) AND model IN ($model) GROUP BY failure_type ORDER BY 1;"
         }
       ],
       "fieldConfig": {
@@ -86,7 +97,7 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT case_id, left(max(question), 70) AS question, count(*) AS n_sous_5, round(avg(judge_score), 2) AS note_moy FROM result_review WHERE (judge_score <= $max_score OR judge_score IS NULL) AND model IN ($model) GROUP BY case_id ORDER BY n_sous_5 DESC, note_moy ASC NULLS FIRST LIMIT 25;"
+          "rawSql": "SELECT case_id, left(max(question), 70) AS question, count(*) AS n_sous_5, round(avg(judge_score), 2) AS note_moy FROM result_review WHERE run_id = $run AND (judge_score <= $max_score OR judge_score IS NULL) AND model IN ($model) GROUP BY case_id ORDER BY n_sous_5 DESC, note_moy ASC NULLS FIRST LIMIT 25;"
         }
       ],
       "fieldConfig": {
@@ -120,7 +131,7 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT judge_score AS note, model, failure_type AS type_echec, case_id, question, response, judge_reasoning FROM result_review WHERE (judge_score <= $max_score OR judge_score IS NULL) AND model IN ($model) ORDER BY judge_score ASC NULLS FIRST, model LIMIT 500;"
+          "rawSql": "SELECT judge_score AS note, model, failure_type AS type_echec, case_id, question, response, judge_reasoning FROM result_review WHERE run_id = $run AND (judge_score <= $max_score OR judge_score IS NULL) AND model IN ($model) ORDER BY judge_score ASC NULLS FIRST, model LIMIT 500;"
         }
       ],
       "fieldConfig": {

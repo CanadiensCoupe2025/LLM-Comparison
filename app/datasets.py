@@ -30,7 +30,8 @@ class Dataset:
     version: int | str
     cases: list[Case]
     source_path: Path
-    raw: dict[str, Any] = field(repr=False)
+    description: str = ""
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
 def load_dataset(path: Path) -> Dataset:
@@ -38,7 +39,7 @@ def load_dataset(path: Path) -> Dataset:
 
     Raises `DatasetError` if the file can't be parsed or required keys are
     missing — `dataset.name`, `dataset.version`, `cases`, and every case's
-    `id` + `prompt`.
+    `id` + `prompt`. `dataset.description` is optional (defaults to "").
     """
     path = Path(path)
     if not path.is_file():
@@ -57,10 +58,13 @@ def load_dataset(path: Path) -> Dataset:
         raise DatasetError(f"{path}: missing or invalid `dataset:` header")
     name = header.get("name")
     version = header.get("version")
+    description = header.get("description", "")
     if not isinstance(name, str) or not name.strip():
         raise DatasetError(f"{path}: `dataset.name` must be a non-empty string")
     if version is None:
         raise DatasetError(f"{path}: `dataset.version` is required")
+    if not isinstance(description, str):
+        raise DatasetError(f"{path}: `dataset.description` must be a string")
 
     raw_cases = doc.get("cases")
     if not isinstance(raw_cases, list) or not raw_cases:
@@ -87,6 +91,7 @@ def load_dataset(path: Path) -> Dataset:
         version=version,
         cases=cases,
         source_path=path,
+        description=description,
         raw=doc,
     )
 

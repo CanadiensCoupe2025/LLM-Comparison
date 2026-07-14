@@ -30,7 +30,7 @@ and catches quality regressions in CI/CD.
 - docs/ARCHITECTURE.md → Full technical architecture. Read this before anything else.
 - db/schema.sql       → PostgreSQL base schema (4 tables: models, prompts, runs,
                         results), extended in-place by numbered migrations in db/
-- db/0NN_*.sql        → Numbered migrations (currently through 013); add a new one
+- db/0NN_*.sql        → Numbered migrations (currently through 021); add a new one
                         for any schema change, never edit the base schema
 - db/seed.sql         → Test data
 - docker-compose.yml  → Local dev environment
@@ -59,9 +59,16 @@ docker compose exec postgres psql -U llm -d llm_eval
   extended in-place by numbered migrations: `question`, `case_id`, `prompt_style`,
   `sample_idx`, and the response-style features `resp_style_*`.
 - Foreign keys enforce referential integrity
-- All schema changes go through a new numbered migration in db/ (through 017),
+- All schema changes go through a new numbered migration in db/ (through 021),
   never by editing the base schema. The `models` table gains `context_window`
   (014) so prompt size can be expressed as a % of capacity.
+- Run-scoping (020/021): every Grafana board is scoped to ONE run via a `$run`
+  template variable so a fresh test isn't blended with history. Migration 020
+  adds `decisions.run_id` (FK → runs, `ON DELETE CASCADE`); migration 021
+  appends a `run_id` column to the views the dashboards read (`model_metrics`,
+  `style_confound`, `model_decision_metrics`, `decision_summary`,
+  `decision_by_profile`) — `CREATE OR REPLACE VIEW` only allows appending
+  columns, so `run_id` is always last. `result_review` (013) already had it.
 - Judge score scale: the LLM judge returns a raw float in [0.0, 1.0]; it is
   scaled ×5 at persist time and stored in `results.judge_score` on a 0–5 scale.
 - Repeated sampling: the runner evaluates each (case, model) pair N times
@@ -78,12 +85,21 @@ docker compose exec postgres psql -U llm -d llm_eval
 - Aggregation views Grafana reads: `run_metrics` (004), `style_metrics` (006),
   `model_metrics` (008), `result_variance` (010), `style_confound` (012),
   `model_decision_metrics` (015), `decision_summary` (016),
-  `decision_by_profile` (017).
+  `decision_by_profile` (017); the dashboard-facing ones carry `run_id` (021)
+  so each board filters to a single run.
+- Per-dataset snapshot/restore: `scripts/dataset_snapshot.sh export <dataset>`
+  writes a self-contained, psql-restorable `.sql` (runs + results + decisions
+  for that dataset) to `eval_backups/`; `... restore <file>` backs up the whole
+  DB first, then reloads it (idempotent replace of that dataset's rows, ids
+  preserved because the `models`/`prompts` catalogue is stable).
+  `scripts/reset_db.sh --dataset <name>` wipes one dataset's runs symmetrically.
 - Quality triage: view `result_review` (013) exposes every non-perfect result
   with a heuristic `failure_type` (refus / erreur de fond / omission / forme),
   feeding the `llm_quality_triage` dashboard.
 - Final decision (SCRUM-38): `python -m app.decide --profile <name>` (or
-  `--all-profiles`) recommends the best model **per usage profile**. Profiles are
+  `--all-profiles`) recommends the best model **per usage profile**, scoped to
+  ONE run via `--run <id>` (default: the latest run) so the decision reflects
+  only that test's models — not every model ever judged. Profiles are
   versioned numeric weights in `app/decision_profiles.yaml` (`equilibre` default
   + `etudiant` / `rapide` / `economie`), loaded by `app/profiles.py` (kept out of
   `prompts/templates/` because that folder is scanned by the prompt sync). Hybrid design: `app/decision_scoring.py` ranks models with a
@@ -94,10 +110,11 @@ docker compose exec postgres psql -U llm -d llm_eval
   USD as a *derived* reference — never decisive; tokens are primary). Decisions
   are persisted in `decisions` (with `profile`, `weighted_scores`) and shown by
   the `llm_final_decision` dashboard (views `decision_summary`,
-  `decision_by_profile`). Reproducibility (DoD #6) is enforced by a cache keyed
-  on (`input_hash`, prompt id, profile) where `input_hash` folds in the metrics
-  AND the profile weights: same data + same weights replays the stored decision;
-  editing a weight regenerates it (`--force` to override).
+  `decision_by_profile`, both run-scoped). Reproducibility (DoD #6) is enforced
+  by a cache keyed on (`input_hash`, prompt id, profile) where `input_hash` folds
+  in the metrics, the profile weights AND the run id: same data + same weights +
+  same run replays the stored decision; editing a weight regenerates it
+  (`--force` to override).
 
 ## Logging (SCRUM-32)
 - All Python components emit **structured JSON logs, one line per event**, via

@@ -206,6 +206,7 @@ def _decision_db_row():
         "etudiant",
         [{"model": "claude-haiku-4-5", "score": 0.82}],
         datetime(2026, 6, 25, 10, 0, 0),
+        42,  # run_id
     )
 
 
@@ -251,31 +252,42 @@ def test_insert_decision_wraps_json_columns_and_commits():
         reasoning="x",
         prompt_id=3,
         input_hash="abc123",
-        input_snapshot=[{"model": "gpt-5"}],
+        input_snapshot=[{"model": "gpt-5.4"}],
         profile="etudiant",
         weighted_scores=[{"model": "claude-haiku-4-5", "score": 0.82}],
+        run_id=42,
     )
 
     sql, params = cur.execute.call_args.args
     assert "INSERT INTO decisions" in sql
-    assert "profile" in sql and "weighted_scores" in sql
+    assert "profile" in sql and "weighted_scores" in sql and "run_id" in sql
     # JSONB columns are wrapped so psycopg adapts list/dict correctly
     assert isinstance(params[2], Jsonb)   # determinant_metrics
     assert isinstance(params[7], Jsonb)   # input_snapshot
     assert isinstance(params[9], Jsonb)   # weighted_scores
     assert params[8] == "etudiant"        # profile
+    assert params[10] == 42               # run_id
     conn.commit.assert_called_once()
 
 
-def test_fetch_decision_metrics_returns_dicts_keyed_by_column():
+def test_fetch_decision_metrics_scopes_to_one_run():
     conn, cur = _mock_conn()
     cur.description = [MagicMock(name="col") for _ in range(2)]
     cur.description[0].name = "model"
     cur.description[1].name = "efficiency"
-    cur.fetchall.return_value = [("gpt-5", Decimal("0.8"))]
+    cur.fetchall.return_value = [("gpt-5.4", Decimal("0.8"))]
 
-    rows = PostgresResultsRepository(conn).fetch_decision_metrics()
+    rows = PostgresResultsRepository(conn).fetch_decision_metrics(42)
 
-    sql = cur.execute.call_args.args[0]
+    sql, params = cur.execute.call_args.args
     assert "FROM model_decision_metrics" in sql
-    assert rows == [{"model": "gpt-5", "efficiency": Decimal("0.8")}]
+    assert "WHERE run_id = %s" in sql
+    assert params == (42,)
+    assert rows == [{"model": "gpt-5.4", "efficiency": Decimal("0.8")}]
+
+
+def test_latest_run_id_reads_max():
+    conn, cur = _mock_conn()
+    cur.fetchone.return_value = (99,)
+    assert PostgresResultsRepository(conn).latest_run_id() == 99
+    assert "MAX(id)" in cur.execute.call_args.args[0]

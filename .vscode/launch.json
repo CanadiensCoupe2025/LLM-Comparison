@@ -1,0 +1,67 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Cheap end-to-end run: 1 model, 1 sample, no judge — real API + real DB.
+      "name": "Runner (smoke, 1 sample, no judge)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.runner",
+      "args": [
+        "--dataset", "evaluator/datasets/sprint1_smoke.yaml",
+        "--models", "claude-haiku-4-5",
+        "--samples", "1"
+      ],
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "envFile": "${workspaceFolder}/.env.debug",
+      "preLaunchTask": "make-debug-env",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Runner (smoke + judge)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.runner",
+      "args": [
+        "--dataset", "evaluator/datasets/sprint1_smoke.yaml",
+        "--models", "claude-haiku-4-5", "gpt-5",
+        "--samples", "1",
+        "--judge"
+      ],
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "envFile": "${workspaceFolder}/.env.debug",
+      "preLaunchTask": "make-debug-env",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Decide (--profile equilibre)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.decide",
+      "args": ["--profile", "equilibre"],
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "envFile": "${workspaceFolder}/.env.debug",
+      "preLaunchTask": "make-debug-env",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "GUI (Streamlit)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "streamlit",
+      "args": ["run", "gui.py"],
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "envFile": "${workspaceFolder}/.env.debug",
+      "preLaunchTask": "make-debug-env",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
