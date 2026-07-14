@@ -17,7 +17,7 @@ Chaque section est traçable vers les items du backlog ; la matrice de traçabil
 
 ## 2. Vue d'ensemble
 
-La plateforme est un **banc d'essai automatisé pour modèles de langage (LLM)**. Elle permet d'exécuter un même prompt contre plusieurs modèles (Claude, OpenAI, DeepSeek, Gemini), de mesurer et comparer leurs performances (qualité, latence, coût), de stocker l'historique complet des exécutions, et de détecter automatiquement les régressions de qualité à chaque modification de code.
+La plateforme est un **banc d'essai automatisé pour modèles de langage (LLM)**. Elle permet d'exécuter un même prompt contre plusieurs modèles (Claude, OpenAI, Gemini), de mesurer et comparer leurs performances (qualité, latence, coût), de stocker l'historique complet des exécutions, et de détecter automatiquement les régressions de qualité à chaque modification de code.
 
 Le projet suit une progression en quatre temps, reflétée par les épics :
 
@@ -36,7 +36,7 @@ Principe directeur tiré du backlog : *tout doit fonctionner en local avant de p
 
 Besoins fonctionnels :
 
-- **B1 — Abstraction multi-fournisseurs :** appeler Claude, OpenAI, DeepSeek et Gemini via une interface commune (registre de modèles + adaptateurs par fournisseur), extensible à de nouveaux modèles sans toucher au reste du code (SCRUM-17, Gemini ajouté en SCRUM-23).
+- **B1 — Abstraction multi-fournisseurs :** appeler Claude, OpenAI et Gemini via une interface commune (registre de modèles + adaptateurs par fournisseur), extensible à de nouveaux modèles sans toucher au reste du code (SCRUM-17, Gemini ajouté en SCRUM-23).
 - **B2 — Versioning des prompts :** tracer quelle version d'un prompt a produit quels résultats, via YAML + hash (SCRUM-18).
 - **B3 — Exécution comparative :** lancer un prompt contre N modèles en parallèle et stocker chaque résultat (SCRUM-19).
 - **B4 — Métriques :** mesurer latence, tokens, coût (SCRUM-22) et qualité via LLM-as-judge **(Gemini)** sur une échelle 0–5 (SCRUM-23) ; la similarité cosinus est citée au niveau épic (SCRUM-11) comme métrique de qualité complémentaire.
@@ -82,7 +82,6 @@ flowchart TB
     subgraph Providers["Fournisseurs LLM externes"]
         CLAUDE[(Anthropic Claude)]
         OPENAI[(OpenAI)]
-        DEEPSEEK[(DeepSeek)]
         GEMINI[(Google Gemini<br/>juge)]
     end
 
@@ -101,7 +100,6 @@ flowchart TB
     RUN --> LLM
     LLM --> CLAUDE
     LLM --> OPENAI
-    LLM --> DEEPSEEK
     LLM --> GEMINI
     RUN --> MET
     RUN --> JUDGE
@@ -120,7 +118,7 @@ flowchart TB
 ## 5. Composants principaux et responsabilités
 
 ### 5.1 LLM Client (`llm_client.py`) — SCRUM-17
-Point d'entrée unique vers les fournisseurs. Expose `call_llm(provider, model, prompt)` et masque les différences entre Claude, OpenAI, DeepSeek et Gemini. Repose sur un **registre de modèles** (`MODEL_REGISTRY`) et un **adaptateur par fournisseur** (Anthropic, OpenAI, DeepSeek, Gemini) ; ajouter un modèle = ajouter une entrée au registre. Lit les clés API exclusivement depuis l'environnement. Le budget de tokens de sortie est partagé par tous les adaptateurs (`DEFAULT_MAX_TOKENS = 8192`) : sur les modèles de raisonnement (API *Responses* d'OpenAI, ex. `gpt-5`/`o3`) ce budget couvre **à la fois le raisonnement et la réponse visible** — trop bas, le raisonnement le consomme entièrement et la réponse revient vide. L'adaptateur Anthropic relève `max_retries` à 8 : le pool Sonnet renvoie des HTTP 529 (`overloaded_error`) en période de charge, et le SDK rejoue ces 529 avec back-off exponentiel pour ne pas perdre de cas.
+Point d'entrée unique vers les fournisseurs. Expose `call_llm(provider, model, prompt)` et masque les différences entre Claude, OpenAI et Gemini. Repose sur un **registre de modèles** (`MODEL_REGISTRY`) et un **adaptateur par fournisseur** (Anthropic, OpenAI, Gemini) ; ajouter un modèle = ajouter une entrée au registre. Lit les clés API exclusivement depuis l'environnement. Le budget de tokens de sortie est partagé par tous les adaptateurs (`DEFAULT_MAX_TOKENS = 8192`) : sur les modèles de raisonnement (API *Responses* d'OpenAI, ex. `gpt-5`/`o3`) ce budget couvre **à la fois le raisonnement et la réponse visible** — trop bas, le raisonnement le consomme entièrement et la réponse revient vide. L'adaptateur Anthropic relève `max_retries` à 8 : le pool Sonnet renvoie des HTTP 529 (`overloaded_error`) en période de charge, et le SDK rejoue ces 529 avec back-off exponentiel pour ne pas perdre de cas.
 
 ### 5.2 Prompt Registry — SCRUM-18
 Gère les prompts comme des artefacts versionnés : fichiers YAML avec champ `version`, hash dérivé du contenu, et historique consultable en base. Toute modification de contenu génère une nouvelle version, garantissant la traçabilité « quel prompt a produit quel résultat ».
@@ -299,4 +297,4 @@ flowchart LR
 4. Le **canal de notification des alertes** (email vs webhook, SCRUM-31) reste à arrêter.
 5. Les travaux **échantillonnage répété / variance** et **contrôle du style de réponse** (branche `feature/repeated-sampling-variance`) sont implémentés mais leurs **IDs de stories Jira restent à lier** dans la matrice (§10).
 
-> **Note de statut :** ce document est versionné dans `docs/ARCHITECTURE.md` (DoD SCRUM-36) et a été **réconcilié avec l'implémentation** (juge Gemini, fournisseurs DeepSeek/Gemini, échelle 0–5, colonnes `question`/`case_id`/`prompt_style`/`sample_idx`/`resp_style_*`, benchmark SCRUM-37, échantillonnage répété + variance, contrôle du style de réponse, triage qualité ; migrations jusqu'à `013`). Les sections Azure/IaC (§5.10) et Observabilité Grafana (§5.11, alertes) décrivent l'**architecture cible** : stories planifiées (SCRUM-27 à 31) non encore implémentées. Sont **implémentés** : le **logging structuré JSON** (§5.8, SCRUM-32 — `app/logging_setup.py`, câblé dans tous les points d'entrée CLI) et le **pipeline CI** (§5.9, SCRUM-25 — `.github/workflows/ci.yml` : lint ruff → tests pytest + couverture ≥ 70 % → portail de régression d'éval qui échoue si un score moyen passe sous 3,5/5, via `runner --fail-under`). Revue par un pair restant à effectuer.
+> **Note de statut :** ce document est versionné dans `docs/ARCHITECTURE.md` (DoD SCRUM-36) et a été **réconcilié avec l'implémentation** (juge Gemini, fournisseur Gemini, échelle 0–5, colonnes `question`/`case_id`/`prompt_style`/`sample_idx`/`resp_style_*`, benchmark SCRUM-37, échantillonnage répété + variance, contrôle du style de réponse, triage qualité ; migrations jusqu'à `013`). Les sections Azure/IaC (§5.10) et Observabilité Grafana (§5.11, alertes) décrivent l'**architecture cible** : stories planifiées (SCRUM-27 à 31) non encore implémentées. Sont **implémentés** : le **logging structuré JSON** (§5.8, SCRUM-32 — `app/logging_setup.py`, câblé dans tous les points d'entrée CLI) et le **pipeline CI** (§5.9, SCRUM-25 — `.github/workflows/ci.yml` : lint ruff → tests pytest + couverture ≥ 70 % → portail de régression d'éval qui échoue si un score moyen passe sous 3,5/5, via `runner --fail-under`). Revue par un pair restant à effectuer.

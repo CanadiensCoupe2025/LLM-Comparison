@@ -6,7 +6,7 @@ result to PostgreSQL — synchronously, on the main thread, as futures resolve.
 
 CLI :
     python runner.py --dataset evaluator/datasets/regression_v1.yaml \\
-                     --models claude-sonnet-4-6 gpt-5.4 \\
+                     --models claude-sonnet-4-6 gpt-5.4-nano \\
                      --max-workers 6
 
 Exit codes:

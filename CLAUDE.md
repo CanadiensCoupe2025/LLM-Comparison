@@ -30,7 +30,7 @@ and catches quality regressions in CI/CD.
 - docs/ARCHITECTURE.md → Full technical architecture. Read this before anything else.
 - db/schema.sql       → PostgreSQL base schema (4 tables: models, prompts, runs,
                         results), extended in-place by numbered migrations in db/
-- db/0NN_*.sql        → Numbered migrations (currently through 020); add a new one
+- db/0NN_*.sql        → Numbered migrations (currently through 021); add a new one
                         for any schema change, never edit the base schema
 - db/seed.sql         → Test data
 - docker-compose.yml  → Local dev environment
@@ -59,12 +59,12 @@ docker compose exec postgres psql -U llm -d llm_eval
   extended in-place by numbered migrations: `question`, `case_id`, `prompt_style`,
   `sample_idx`, and the response-style features `resp_style_*`.
 - Foreign keys enforce referential integrity
-- All schema changes go through a new numbered migration in db/ (through 020),
+- All schema changes go through a new numbered migration in db/ (through 021),
   never by editing the base schema. The `models` table gains `context_window`
   (014) so prompt size can be expressed as a % of capacity.
-- Run-scoping (019/020): every Grafana board is scoped to ONE run via a `$run`
-  template variable so a fresh test isn't blended with history. Migration 019
-  adds `decisions.run_id` (FK → runs, `ON DELETE CASCADE`); migration 020
+- Run-scoping (020/021): every Grafana board is scoped to ONE run via a `$run`
+  template variable so a fresh test isn't blended with history. Migration 020
+  adds `decisions.run_id` (FK → runs, `ON DELETE CASCADE`); migration 021
   appends a `run_id` column to the views the dashboards read (`model_metrics`,
   `style_confound`, `model_decision_metrics`, `decision_summary`,
   `decision_by_profile`) — `CREATE OR REPLACE VIEW` only allows appending
@@ -85,7 +85,7 @@ docker compose exec postgres psql -U llm -d llm_eval
 - Aggregation views Grafana reads: `run_metrics` (004), `style_metrics` (006),
   `model_metrics` (008), `result_variance` (010), `style_confound` (012),
   `model_decision_metrics` (015), `decision_summary` (016),
-  `decision_by_profile` (017); the dashboard-facing ones carry `run_id` (020)
+  `decision_by_profile` (017); the dashboard-facing ones carry `run_id` (021)
   so each board filters to a single run.
 - Per-dataset snapshot/restore: `scripts/dataset_snapshot.sh export <dataset>`
   writes a self-contained, psql-restorable `.sql` (runs + results + decisions

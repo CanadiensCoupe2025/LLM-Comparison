@@ -1,5 +1,5 @@
 -- -------------------------------------------------------------
--- Migration 020 — Run-scope the aggregation views (Grafana run picker)
+-- Migration 021 — Run-scope the aggregation views (Grafana run picker)
 -- -------------------------------------------------------------
 -- The dashboards aggregated over the WHOLE results table, so a fresh
 -- test never "reset" the boards — old runs' models kept showing up
@@ -15,9 +15,9 @@
 -- `result_review` (013) already exposes run_id and `style_metrics`
 -- (006) feeds no dashboard, so neither is touched here.
 --
--- Apply after 019_decisions_run_id.sql :
+-- Apply after 020_decisions_run_id.sql :
 --   docker compose exec -T postgres psql -U llm -d llm_eval \
---     < db/020_run_scoped_views.sql
+--     < db/021_run_scoped_views.sql
 -- -------------------------------------------------------------
 
 -- --- model_metrics (008): per (model, run) --------------------------

@@ -29,6 +29,8 @@ def test_registry_lists_all_models():
         "claude-sonnet-5",
         "gpt-5.5",
         "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano",
         "gemini-2.5-pro",
         "gemini-2.5-flash",
     }
@@ -38,9 +40,9 @@ def test_registry_provider_counts():
     by_provider: dict[str, int] = {}
     for spec in MODEL_REGISTRY.values():
         by_provider[spec.provider] = by_provider.get(spec.provider, 0) + 1
-    # Anthropic: sonnet-4-6/opus-4-8/haiku-4-5/sonnet-5; openai x2 (gpt-5.5,
-    # gpt-5.4); gemini pro + flash (judge only, not a comparison model).
-    assert by_provider == {"anthropic": 4, "openai": 2, "gemini": 2}
+    # Anthropic: sonnet-4-6/opus-4-8/haiku-4-5/sonnet-5; openai x4 (gpt-5.5/5.4/
+    # 5.4-mini/5.4-nano); gemini pro + flash (judge only, not a comparison model).
+    assert by_provider == {"anthropic": 4, "openai": 4, "gemini": 2}
 
 
 def test_openai_reasoning_models_disable_temperature():

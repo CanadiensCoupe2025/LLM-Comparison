@@ -76,6 +76,12 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     "gpt-5.4": ModelSpec(
         "openai", "gpt-5.4", ApiSurface.RESPONSES, False, True, 400_000
     ),
+    "gpt-5.4-mini": ModelSpec(
+        "openai", "gpt-5.4-mini", ApiSurface.RESPONSES, False, True, 400_000
+    ),
+    "gpt-5.4-nano": ModelSpec(
+        "openai", "gpt-5.4-nano", ApiSurface.RESPONSES, False, True, 400_000
+    ),
     # Gemini is the LLM-judge (app/judge.py, app/decision.py) — not a
     # comparison target, so it's excluded from GUI_COMPARISON_MODELS below.
     "gemini-2.5-pro": ModelSpec(
