@@ -28,7 +28,7 @@
       "id": 1,
       "type": "barchart",
       "title": "Avg latency per model (ms)",
-      "description": "Mean response latency per model across all evaluations. Source: model_metrics.",
+      "description": "Mean response latency per model. Complete cases only (cases with a result from every model in the run). Source: model_metrics.",
       "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
       "targets": [
@@ -63,7 +63,7 @@
       "id": 2,
       "type": "barchart",
       "title": "Avg judge score per model (0-5)",
-      "description": "Mean judge quality score per model (judged results only). Source: model_metrics.",
+      "description": "Mean judge quality score per model (judged results only). Complete cases only, so every model is averaged over the SAME question set. Source: model_metrics.",
       "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
       "targets": [
@@ -100,7 +100,7 @@
       "id": 3,
       "type": "barchart",
       "title": "Cumulative cost per model (USD)",
-      "description": "Total cost per model across all evaluations. Source: model_metrics.",
+      "description": "Cost per model over the compared (complete) cases — the run's true total spend lives in run_metrics. USD is a derived reference; tokens are the primary cost metric. Source: model_metrics.",
       "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
       "targets": [
@@ -133,10 +133,10 @@
       }
     },
     {
-      "id": 4,
-      "type": "table",
-      "title": "Judge score mean ± stddev per model",
-      "description": "Quality with run-to-run spread from repeated sampling. mean = avg_judge_score (the N-sample mean the regression alert uses); stddev = STDDEV_SAMP over samples (NULL/blank when n_results < 2). Source: model_metrics.",
+      "id": 6,
+      "type": "barchart",
+      "title": "Avg total tokens per model",
+      "description": "Mean input+output tokens per answer. Tokens are the project's primary cost metric; USD is derived. Complete cases only. Source: model_metrics.",
       "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
       "targets": [
@@ -144,7 +144,42 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT model, avg_judge_score AS mean_score, stddev_judge_score AS stddev_score, n_cases, n_results AS n_samples\nFROM model_metrics\nWHERE run_id = $run AND avg_judge_score IS NOT NULL\nORDER BY avg_judge_score DESC;"
+          "rawSql": "SELECT model, avg_total_tokens\nFROM model_metrics\nWHERE run_id = $run\nORDER BY avg_total_tokens DESC;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 1, "fillOpacity": 80, "axisLabel": "avg tokens (in+out)", "gradientMode": "none" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "model",
+        "colorByField": "model",
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "legend": { "showLegend": false, "displayMode": "list", "placement": "right", "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Judge score mean ± stddev per model",
+      "description": "Quality with spread. mean = avg_judge_score (the N-sample mean the regression alert uses); stddev = STDDEV_SAMP over all judged answers — blank (—) when every case has a single judged draw (--samples 1: one draw has no sampling spread). Complete cases only. Source: model_metrics.",
+      "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
+          "rawSql": "SELECT model, avg_judge_score AS mean_score, CASE WHEN n_judged > n_cases THEN stddev_judge_score END AS stddev_score, n_cases, n_judged AS n_samples\nFROM model_metrics\nWHERE run_id = $run AND avg_judge_score IS NOT NULL\nORDER BY avg_judge_score DESC;"
         }
       ],
       "fieldConfig": {
@@ -162,7 +197,10 @@
           },
           {
             "matcher": { "id": "byName", "options": "stddev_score" },
-            "properties": [ { "id": "decimals", "value": 2 } ]
+            "properties": [
+              { "id": "decimals", "value": 2 },
+              { "id": "noValue", "value": "—" }
+            ]
           }
         ]
       },
@@ -177,7 +215,7 @@
       "title": "Detailed results / logs (question, response, judge)",
       "description": "One row per result: the question asked, the full model response, and the judge's score + reasoning. Source: results joined to models. No prompt_style filter, so every dataset shows here.",
       "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 32 },
+      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 40 },
       "targets": [
         {
           "refId": "A",

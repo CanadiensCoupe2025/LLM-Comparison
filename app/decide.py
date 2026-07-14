@@ -10,6 +10,10 @@ for the same (input_hash, prompt_id, profile). `input_hash` folds in the metrics
 AND the profile weights, so the stored decision is replayed whenever nothing
 changed — and editing a weight regenerates it.
 
+The runner calls `decide_run()` automatically after every judged run
+(SCRUM-38 "always shows up"); this CLI remains for re-decides, `--force`,
+or deciding an older `--run`.
+
 Usage:
     python -m app.decide                      # default profile 'equilibre'
     python -m app.decide --profile rapide     # one named profile
@@ -23,7 +27,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 
 import psycopg
 
@@ -44,6 +48,8 @@ from app.results_repository import DecisionRow, PostgresResultsRepository
 EXIT_OK = 0
 EXIT_CONFIG = 1
 EXIT_NO_DATA = 4
+
+DEFAULT_DECISION_MODEL = "gemini-2.5-pro"
 
 TEMPLATES_DIR = Path(__file__).parent / "prompts" / "templates"
 PROMPT_NAME = "final_decision"
@@ -92,13 +98,13 @@ def _decide_one(
     judge_model: str,
     force: bool,
     run_id: Optional[int],
-) -> None:
+) -> tuple[Union[Decision, DecisionRow], bool]:
+    """Decide (or replay from cache) for one profile; return (decision, replayed)."""
     h_in = input_hash(metrics, profile, run_id)
     if not force:
         cached = repo.find_decision(input_hash=h_in, prompt_id=prompt_id, profile=profile.name)
         if cached is not None:
-            _print_decision(cached, replayed=True)
-            return
+            return cached, True
 
     decision = decide(metrics, profile, rubric=rubric, model=judge_model)
     log.info(
@@ -122,7 +128,43 @@ def _decide_one(
         weighted_scores=decision.weighted_scores,
         run_id=run_id,
     )
-    _print_decision(decision, replayed=False)
+    return decision, False
+
+
+def decide_run(
+    conn,
+    run_id: int,
+    *,
+    profiles: Optional[Sequence[Profile]] = None,
+    judge_model: str = DEFAULT_DECISION_MODEL,
+    force: bool = False,
+) -> list[tuple[Union[Decision, DecisionRow], bool]]:
+    """Compute (or replay from cache) the final decision for one run.
+
+    The library seam shared by this CLI and the runner's auto-decide hook:
+    one decision per profile (default: every profile in
+    decision_profiles.yaml). Returns [] when the run has no judged metrics
+    in `model_decision_metrics`; LLM/DB errors propagate to the caller.
+    """
+    if profiles is None:
+        profiles = list(load_profiles().values())
+
+    repo = PostgresResultsRepository(conn)
+    prompt_repo = PostgresPromptRepository(conn)
+
+    metrics = repo.fetch_decision_metrics(run_id)
+    if not metrics:
+        return []
+
+    prompt_id = _resolve_prompt_id(prompt_repo)
+    rubric = load_decision_prompt().content
+    return [
+        _decide_one(
+            repo, metrics, profile, prompt_id, rubric, judge_model,
+            force, run_id,
+        )
+        for profile in profiles
+    ]
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -154,8 +196,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     parser.add_argument(
         "--model",
-        default="gemini-2.5-pro",
-        help="Judge model used to write the justification (default: gemini-2.5-pro).",
+        default=DEFAULT_DECISION_MODEL,
+        help="Judge model used to write the justification "
+             f"(default: {DEFAULT_DECISION_MODEL}).",
     )
     args = parser.parse_args(argv)
     configure_logging()
@@ -173,15 +216,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     conn = _connect_db()
     try:
         repo = PostgresResultsRepository(conn)
-        prompt_repo = PostgresPromptRepository(conn)
 
         run_id = args.run if args.run is not None else repo.latest_run_id()
         if run_id is None:
             log.error("no runs in the database — run an eval first.")
             return EXIT_NO_DATA
 
-        metrics = repo.fetch_decision_metrics(run_id)
-        if not metrics:
+        results = decide_run(
+            conn, run_id, profiles=profiles, judge_model=args.model,
+            force=args.force,
+        )
+        if not results:
             log.error(
                 "no judged results for run #%s in `model_decision_metrics` — "
                 "run with --judge first (or pick another --run).",
@@ -189,13 +234,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             )
             return EXIT_NO_DATA
 
-        prompt_id = _resolve_prompt_id(prompt_repo)
-        rubric = load_decision_prompt().content
-        for profile in profiles:
-            _decide_one(
-                repo, metrics, profile, prompt_id, rubric, args.model,
-                args.force, run_id,
-            )
+        for decision, replayed in results:
+            _print_decision(decision, replayed=replayed)
         return EXIT_OK
     finally:
         conn.close()

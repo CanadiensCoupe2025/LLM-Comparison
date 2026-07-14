@@ -223,7 +223,7 @@
       "id": 7,
       "type": "table",
       "title": "Comparatif complet par modèle (données ayant servi à la décision)",
-      "description": "Toutes les métriques agrégées par modèle (vue model_decision_metrics) — le tableau exact soumis au scoring. Trié par efficacité décroissante.",
+      "description": "Toutes les métriques agrégées par modèle (vue model_decision_metrics) — le tableau exact soumis au scoring. Cas complets uniquement (chaque modèle est moyenné sur le MÊME jeu de questions). Écart-type affiché seulement avec échantillonnage répété (--samples > 1). Trié par efficacité décroissante.",
       "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 23 },
       "targets": [
@@ -231,13 +231,14 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT model AS modèle, n_judged AS \"n jugés\", mean_judge_score AS \"qualité (0-5)\", stddev_judge_score AS \"écart-type\", efficiency AS \"efficacité (pts/1k tok)\", avg_total_tokens AS \"tokens moy\", avg_latency_ms AS \"latence ms\", ctx_pct AS \"% contexte\", avg_cost AS \"coût USD (dérivé)\" FROM model_decision_metrics WHERE run_id = $run ORDER BY efficiency DESC NULLS LAST;"
+          "rawSql": "SELECT model AS modèle, n_judged AS \"n jugés\", mean_judge_score AS \"qualité (0-5)\", CASE WHEN n_judged > n_cases THEN stddev_judge_score END AS \"écart-type\", efficiency AS \"efficacité (pts/1k tok)\", avg_total_tokens AS \"tokens moy\", avg_latency_ms AS \"latence ms\", ctx_pct AS \"% contexte\", avg_cost AS \"coût USD (dérivé)\" FROM model_decision_metrics WHERE run_id = $run ORDER BY efficiency DESC NULLS LAST;"
         }
       ],
       "fieldConfig": {
         "defaults": { "custom": { "align": "center", "filterable": true } },
         "overrides": [
           { "matcher": { "id": "byName", "options": "modèle" }, "properties": [{ "id": "custom.width", "value": 180 }, { "id": "custom.align", "value": "left" }] },
+          { "matcher": { "id": "byName", "options": "écart-type" }, "properties": [{ "id": "decimals", "value": 2 }, { "id": "noValue", "value": "—" }] },
           {
             "matcher": { "id": "byName", "options": "qualité (0-5)" },
             "properties": [

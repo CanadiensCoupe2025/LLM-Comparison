@@ -30,7 +30,7 @@ and catches quality regressions in CI/CD.
 - docs/ARCHITECTURE.md → Full technical architecture. Read this before anything else.
 - db/schema.sql       → PostgreSQL base schema (4 tables: models, prompts, runs,
                         results), extended in-place by numbered migrations in db/
-- db/0NN_*.sql        → Numbered migrations (currently through 021); add a new one
+- db/0NN_*.sql        → Numbered migrations (currently through 022); add a new one
                         for any schema change, never edit the base schema
 - db/seed.sql         → Test data
 - docker-compose.yml  → Local dev environment
@@ -59,7 +59,7 @@ docker compose exec postgres psql -U llm -d llm_eval
   extended in-place by numbered migrations: `question`, `case_id`, `prompt_style`,
   `sample_idx`, and the response-style features `resp_style_*`.
 - Foreign keys enforce referential integrity
-- All schema changes go through a new numbered migration in db/ (through 021),
+- All schema changes go through a new numbered migration in db/ (through 022),
   never by editing the base schema. The `models` table gains `context_window`
   (014) so prompt size can be expressed as a % of capacity.
 - Run-scoping (020/021): every Grafana board is scoped to ONE run via a `$run`
@@ -85,8 +85,19 @@ docker compose exec postgres psql -U llm -d llm_eval
 - Aggregation views Grafana reads: `run_metrics` (004), `style_metrics` (006),
   `model_metrics` (008), `result_variance` (010), `style_confound` (012),
   `model_decision_metrics` (015), `decision_summary` (016),
-  `decision_by_profile` (017); the dashboard-facing ones carry `run_id` (021)
-  so each board filters to a single run.
+  `decision_by_profile` (017), `complete_cases` (022); the dashboard-facing
+  ones carry `run_id` (021) so each board filters to a single run.
+- Complete-cases filter (022): a failed model call leaves NO `results` row and
+  a failed judge leaves a NULL score, so per-model averages used to cover
+  different question sets. View `complete_cases` lists the (run, case) pairs
+  every model completed (scored, on judged runs); `model_metrics` and
+  `model_decision_metrics` now join it so all models are averaged over the
+  SAME cases. `model_metrics` also gained `n_judged` + `avg_total_tokens`
+  (rebuilt via DROP+CREATE — allowed because nothing depends on it; `run_id`
+  stays last). The dashboards use `n_judged > n_cases` to blank the stddev
+  when there's no repeated sampling (a pooled stddev at --samples 1 measures
+  question difficulty, not sampling noise). `result_review` and `run_metrics`
+  stay unfiltered on purpose (triage must show failures; true spend).
 - Per-dataset snapshot/restore: `scripts/dataset_snapshot.sh export <dataset>`
   writes a self-contained, psql-restorable `.sql` (runs + results + decisions
   for that dataset) to `eval_backups/`; `... restore <file>` backs up the whole
@@ -96,8 +107,13 @@ docker compose exec postgres psql -U llm -d llm_eval
 - Quality triage: view `result_review` (013) exposes every non-perfect result
   with a heuristic `failure_type` (refus / erreur de fond / omission / forme),
   feeding the `llm_quality_triage` dashboard.
-- Final decision (SCRUM-38): `python -m app.decide --profile <name>` (or
-  `--all-profiles`) recommends the best model **per usage profile**, scoped to
+- Final decision (SCRUM-38): recorded **automatically after every judged run**
+  — the runner (both the CLI and `launch_run`, so the GUI too) calls
+  `app.decide.decide_run()` for ALL profiles, best-effort (a Gemini/DB failure
+  is logged but never changes the run's exit code); `--no-decide` skips it
+  (CI does). `python -m app.decide --profile <name>` (or
+  `--all-profiles`) remains for re-decides: it recommends the best model
+  **per usage profile**, scoped to
   ONE run via `--run <id>` (default: the latest run) so the decision reflects
   only that test's models — not every model ever judged. Profiles are
   versioned numeric weights in `app/decision_profiles.yaml` (`equilibre` default

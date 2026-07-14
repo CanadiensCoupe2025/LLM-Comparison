@@ -33,6 +33,7 @@ from typing import Callable, Optional
 import psycopg
 
 from app.datasets import Case, Dataset, DatasetError, load_dataset
+from app.decide import decide_run
 from app.judge import judge, to_db_scale
 from app.llm_client import MODEL_REGISTRY, LLMResponse, call_llm
 from app.logging_setup import configure_logging, get_logger, log_context
@@ -368,6 +369,40 @@ def execute_run(
     )
 
 
+def _auto_decide(conn, run_id: int) -> list:
+    """Record the per-profile final decision right after a judged run.
+
+    Best-effort by design — the results are already persisted, so a Gemini
+    or DB hiccup here must not change the run's exit code or kill a GUI
+    run: every exception is swallowed and logged. Returns the
+    `(decision, replayed)` pairs from `decide_run`, or [] on skip/failure.
+    """
+    try:
+        results = decide_run(conn, run_id)
+        if not results:
+            log.warning(
+                "auto-decide skipped: no judged metrics for this run",
+                extra={"run_id": run_id},
+            )
+        for decision, replayed in results:
+            log.info(
+                "final decision recorded",
+                extra={
+                    "run_id": run_id,
+                    "profile": decision.profile,
+                    "model": decision.recommended_model,
+                    "replayed": replayed,
+                },
+            )
+        return results
+    except Exception as e:
+        log.warning(
+            "auto-decide failed (run results remain valid): %s: %s",
+            type(e).__name__, e, exc_info=e, extra={"run_id": run_id},
+        )
+        return []
+
+
 def launch_run(
     dataset_path,
     model_keys: list[str],
@@ -423,6 +458,11 @@ def launch_run(
                 samples=samples,
                 do_judge=do_judge,
             )
+            # Judged run → record the per-profile final decision so the
+            # "LLM Final Decision" board is populated without a manual
+            # `python -m app.decide` (best-effort, never raises).
+            if do_judge:
+                _auto_decide(conn, run_id)
         return run_id, outcome
     finally:
         conn.close()
@@ -514,6 +554,13 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         help="Minimum seconds between judge calls (rate-limit throttle). "
         "0 = off (default); judge() already retries 429s with backoff. Raise "
         "only to cap burst RPM when judging is parallelized at high --samples.",
+    )
+    parser.add_argument(
+        "--no-decide",
+        action="store_true",
+        help="Skip the automatic per-profile final decision (app.decide) "
+        "after a judged run. CI uses this; decisions are cached, so running "
+        "`python -m app.decide` later is cheap.",
     )
     return parser.parse_args(argv)
 
@@ -637,6 +684,19 @@ def main(argv: Optional[list[str]] = None) -> int:
             )
         _print_variance_summary(outcome)
         _print_style_summary(outcome)
+
+        # Judged run → auto-record the final decision (SCRUM-38) so the
+        # dashboard always has one for the latest run. Best-effort: a decide
+        # failure never changes the run's exit code.
+        if args.judge and not args.no_decide:
+            decisions = _auto_decide(conn, run_id)
+            if decisions:
+                print("\nFinal decision per profile (dashboard 'LLM Final Decision'):")
+                for d, replayed in decisions:
+                    print(
+                        f"  {d.profile}: {d.recommended_model} — {d.confidence}"
+                        + (" (cache)" if replayed else "")
+                    )
 
         # Regression gate (SCRUM-25): a below-threshold mean is the most
         # actionable signal, so it takes precedence over a partial-failure exit.

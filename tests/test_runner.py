@@ -942,3 +942,112 @@ def test_regression_failures_ignores_unjudged_models():
     # A model with no scores contributes no stats → can't fail the gate.
     outcome = _outcome_with_scores({"judged": [Decimal("4.0")], "unjudged": []})
     assert regression_failures(outcome, 3.5) == []
+
+
+# ---------------------------------------------------------------------------
+# Auto-decide after judged runs (SCRUM-38 "always shows up")
+# ---------------------------------------------------------------------------
+
+
+def _judged_main(tmp_path, argv_extra, *, decide_mock):
+    """Run main() end-to-end with the SDK, DB and decide_run all faked.
+
+    Same seams as test_main_happy_path_persists_results_to_db, plus
+    `app.runner.judge` (module global, patchable) and `app.runner.decide_run`.
+    Returns (exit_code, fake_results_repo).
+    """
+    import os
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from app.judge import JudgeVerdict
+
+    ds = tmp_path / "tiny.yaml"
+    ds.write_text(
+        "dataset:\n  name: t\n  version: 1\ncases:\n  - id: a\n    prompt: hi\n",
+        encoding="utf-8",
+    )
+
+    fake_prompt_repo = MagicMock()
+    fake_prompt_repo.latest_by_name.return_value = MagicMock(id=5, content="SYSTEM")
+    fake_results_repo = FakeResultsRepository({
+        "claude-sonnet-4-6": _model(id=1, name="claude-sonnet-4-6", in_cost="0", out_cost="0"),
+    })
+    fake_anthropic_response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="hello back")],
+        usage=SimpleNamespace(input_tokens=4, output_tokens=2),
+    )
+    fake_verdict = JudgeVerdict(score=0.9, reasoning="ok", response="raw")
+
+    with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}), \
+         patch("anthropic.Anthropic") as mock_anthropic_cls, \
+         patch("app.runner._connect_db", return_value=MagicMock()), \
+         patch("app.runner.PostgresResultsRepository", return_value=fake_results_repo), \
+         patch("app.runner.PostgresPromptRepository", return_value=fake_prompt_repo), \
+         patch("app.runner.judge", return_value=fake_verdict), \
+         patch("app.runner.decide_run", decide_mock):
+        mock_anthropic_cls.return_value.messages.create.return_value = fake_anthropic_response
+        exit_code = main(
+            ["--dataset", str(ds), "--models", "claude-sonnet-4-6", "--samples", "1"]
+            + argv_extra
+        )
+    return exit_code, fake_results_repo
+
+
+def test_main_judged_run_auto_decides(tmp_path, capsys):
+    """--judge (without --no-decide) records the decision for the new run
+    and prints the per-profile summary."""
+    from unittest.mock import MagicMock
+
+    from app.decision import Decision
+
+    decision = Decision(
+        recommended_model="claude-sonnet-4-6", confidence="haute",
+        profile="equilibre", determinant_metrics=[], tradeoffs="",
+        reasoning="stub", weighted_scores=[],
+    )
+    decide_mock = MagicMock(return_value=[(decision, False)])
+
+    exit_code, repo = _judged_main(tmp_path, ["--judge"], decide_mock=decide_mock)
+
+    assert exit_code == 0
+    decide_mock.assert_called_once()
+    # positional: (conn, run_id) — FakeResultsRepository hands out run id 100
+    assert decide_mock.call_args.args[1] == 100
+    out = capsys.readouterr().out
+    assert "Final decision per profile" in out
+    assert "equilibre: claude-sonnet-4-6" in out
+
+
+def test_main_no_decide_flag_skips_auto_decision(tmp_path):
+    from unittest.mock import MagicMock
+
+    decide_mock = MagicMock(return_value=[])
+    exit_code, _ = _judged_main(
+        tmp_path, ["--judge", "--no-decide"], decide_mock=decide_mock
+    )
+
+    assert exit_code == 0
+    decide_mock.assert_not_called()
+
+
+def test_main_unjudged_run_never_auto_decides(tmp_path):
+    from unittest.mock import MagicMock
+
+    decide_mock = MagicMock(return_value=[])
+    exit_code, _ = _judged_main(tmp_path, [], decide_mock=decide_mock)
+
+    assert exit_code == 0
+    decide_mock.assert_not_called()
+
+
+def test_main_auto_decide_failure_keeps_exit_code(tmp_path):
+    """A decide failure is best-effort: logged, swallowed, exit code intact."""
+    from unittest.mock import MagicMock
+
+    decide_mock = MagicMock(side_effect=RuntimeError("gemini down"))
+    exit_code, repo = _judged_main(tmp_path, ["--judge"], decide_mock=decide_mock)
+
+    assert exit_code == 0          # run itself succeeded
+    assert repo.finalized          # and was finalized normally
+    decide_mock.assert_called_once()
