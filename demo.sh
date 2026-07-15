@@ -176,4 +176,4 @@ step "Décision finale par profil (SCRUM-38 — auto après un run jugé)"
 
 banner "Demo complete"
 printf '%sDashboards:%s http://localhost:3000 — LLM Model Comparison,\n' "$C_DIM" "$C_OFF"
-printf '            LLM Final Decision, LLM Quality Triage (run le plus récent).\n\n'
+printf '            LLM Final Decision (run le plus récent).\n\n'

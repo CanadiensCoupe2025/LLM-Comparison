@@ -697,6 +697,13 @@ def main(argv: Optional[list[str]] = None) -> int:
                         f"  {d.profile}: {d.recommended_model} — {d.confidence}"
                         + (" (cache)" if replayed else "")
                     )
+            else:
+                print(
+                    "\n✗ Final decision NOT recorded (see 'auto-decide' warning "
+                    "above) — the 'LLM Final Decision' dashboard will be empty "
+                    f"for this run. Recover with:\n"
+                    f"  python -m app.decide --all-profiles --run {run_id}"
+                )
 
         # Regression gate (SCRUM-25): a below-threshold mean is the most
         # actionable signal, so it takes precedence over a partial-failure exit.

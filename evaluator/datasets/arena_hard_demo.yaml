@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────────
+# arena_hard_demo.yaml  ·  CURATED demo subset (hand-picked)
+#   Source: arena_hard_v2_subset.yaml (arena-hard-auto, Apache-2.0).
+#   6 questions, 2 per category (coding / creative_writing / math),
+#   chosen for readability on screen + score spread. Ids kept for
+#   traceability to the upstream set. Open-ended → run with --judge.
+# ─────────────────────────────────────────────────────────────
+dataset:
+  name: arena_hard_demo
+  version: 1
+  description: Curated 6-question demo subset of arena-hard (2 per category), readable and discriminating. Run with --judge.
+cases:
+- id: 03ac130e6ed44aaa
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Create a responsive instagram login page in flutter also including imges and dark theme
+  expected:
+    check: judge
+- id: 07d8ea70be2b4a17
+  category: coding
+  subcategory: coding
+  kind: main
+  source: arena-hard-v2.0
+  prompt: How is it possible to add `\printbibliography` to the table of contents (`\tableofcontents`) when using `\usepackage[backend=bibtex,urldate=iso]{biblatex}`?
+  expected:
+    check: judge
+- id: 0951d9a616854f3a
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Fais un dialogue en français ou einstein braque une banque et le banquier c'est socrate
+  expected:
+    check: judge
+- id: 0bb6a899b9364d9d
+  category: creative_writing
+  subcategory: creative_writing
+  kind: main
+  source: arena-hard-v2.0
+  prompt: Write a riddle for children
+  expected:
+    check: judge
+- id: 063b6ffd5726453e
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: connaissant la mesure I1=52 dB du bruit exprimé en décibel d'une source sonore située à 7 mètres de distance, est-il possible alors de connaitre la mesure I2 de ce même bruit mais cette fois-ci à 1 mètre de la même source sonore ?
+  expected:
+    check: judge
+- id: 0b95714ca82c46bf
+  category: math
+  subcategory: math
+  kind: main
+  source: arena-hard-v2.0
+  prompt: If neodymium magnets have 2 and 20 lbs pull force on steel, what would the relative attractive forces be when 1 cm away from the steel?
+  expected:
+    check: judge
