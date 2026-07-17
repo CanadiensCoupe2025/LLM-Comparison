@@ -121,9 +121,11 @@ docker compose exec postgres psql -U llm -d llm_eval
   `prompts/templates/` because that folder is scanned by the prompt sync). Hybrid design: `app/decision_scoring.py` ranks models with a
   deterministic min-max weighted score (the PICK + confidence), then the judge
   LLM (Gemini) only *writes the justification* via the versioned prompt
-  `final_decision.yaml` (v2). Metrics come from view `model_decision_metrics`
-  (tokens, latency, judge score, efficiency = score/1k tokens, % context window,
-  USD as a *derived* reference — never decisive; tokens are primary). Decisions
+  `final_decision.yaml` (v2.1). Metrics come from view `model_decision_metrics`
+  (tokens, latency, judge score, efficiency = score/USD since 024 — cost-based
+  because tokenizers aren't comparable across providers, % context window,
+  USD elsewhere stays a *derived* reference; depends on `models` prices being
+  current, cf. 023). Decisions
   are persisted in `decisions` (with `profile`, `weighted_scores`) and shown by
   the `llm_final_decision` dashboard (views `decision_summary`,
   `decision_by_profile`, both run-scoped). Reproducibility (DoD #6) is enforced

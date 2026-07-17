@@ -10,7 +10,7 @@ version: 1.0
 #
 # Allowed metric keys (columns of view model_decision_metrics):
 #   mean_judge_score   (higher better)  — quality, 0–5
-#   efficiency         (higher better)  — quality points per 1k tokens
+#   efficiency         (higher better)  — quality points per USD (024)
 #   avg_total_tokens   (lower better)   — token cost per answer
 #   avg_latency_ms     (lower better)   — speed
 #   ctx_pct            (lower better)   — context window pressure

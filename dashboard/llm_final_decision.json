@@ -164,7 +164,7 @@
       "id": 5,
       "type": "table",
       "title": "Justification du juge — profil « $profile »",
-      "description": "Métriques déterminantes pour ce profil, compromis arbitrés (qualité vs efficacité tokens vs latence) et raisonnement chiffré. Source: vue decision_by_profile.",
+      "description": "Métriques déterminantes pour ce profil, compromis arbitrés (qualité vs efficacité coût vs latence) et raisonnement chiffré. Source: vue decision_by_profile.",
       "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
       "targets": [
@@ -195,7 +195,7 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT profile AS profil, recommended_model AS \"modèle recommandé\", confidence AS confiance, top_score AS \"score\", mean_judge_score AS \"qualité (0-5)\", efficiency AS \"efficacité (pts/1k tok)\", avg_latency_ms AS \"latence ms\", reasoning AS justification FROM decision_by_profile WHERE run_id = $run ORDER BY profile;"
+          "rawSql": "SELECT profile AS profil, recommended_model AS \"modèle recommandé\", confidence AS confiance, top_score AS \"score\", mean_judge_score AS \"qualité (0-5)\", efficiency AS \"efficacité (pts/$)\", avg_latency_ms AS \"latence ms\", reasoning AS justification FROM decision_by_profile WHERE run_id = $run ORDER BY profile;"
         }
       ],
       "fieldConfig": {
@@ -231,7 +231,7 @@
           "refId": "A",
           "format": "table",
           "datasource": { "type": "postgres", "uid": "llmeter_postgres" },
-          "rawSql": "SELECT model AS modèle, n_judged AS \"n jugés\", mean_judge_score AS \"qualité (0-5)\", CASE WHEN n_judged > n_cases THEN stddev_judge_score END AS \"écart-type\", efficiency AS \"efficacité (pts/1k tok)\", avg_total_tokens AS \"tokens moy\", avg_latency_ms AS \"latence ms\", ctx_pct AS \"% contexte\", avg_cost AS \"coût USD (dérivé)\" FROM model_decision_metrics WHERE run_id = $run ORDER BY efficiency DESC NULLS LAST;"
+          "rawSql": "SELECT model AS modèle, n_judged AS \"n jugés\", mean_judge_score AS \"qualité (0-5)\", CASE WHEN n_judged > n_cases THEN stddev_judge_score END AS \"écart-type\", efficiency AS \"efficacité (pts/$)\", avg_total_tokens AS \"tokens moy\", avg_latency_ms AS \"latence ms\", ctx_pct AS \"% contexte\", avg_cost AS \"coût USD (dérivé)\" FROM model_decision_metrics WHERE run_id = $run ORDER BY efficiency DESC NULLS LAST;"
         }
       ],
       "fieldConfig": {
@@ -248,7 +248,7 @@
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "efficacité (pts/1k tok)" },
+            "matcher": { "id": "byName", "options": "efficacité (pts/$)" },
             "properties": [
               { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
               { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "value": null, "color": "red" }, { "value": 0, "color": "orange" }, { "value": 1, "color": "green" } ] } }
@@ -256,7 +256,7 @@
           }
         ]
       },
-      "options": { "showHeader": true, "sortBy": [{ "displayName": "efficacité (pts/1k tok)", "desc": true }] }
+      "options": { "showHeader": true, "sortBy": [{ "displayName": "efficacité (pts/$)", "desc": true }] }
     }
   ]
 }
