@@ -143,7 +143,9 @@ def decide(
     *,
     rubric: str | None = None,
     model: str = "gemini-2.5-pro",
-    max_tokens: int = 4096,
+    # 8192 : même raison que le juge (app/judge.py) — le thinking de
+    # gemini-2.5-pro consomme ce budget avant la justification.
+    max_tokens: int = 8192,
     max_retries: int = 3,
     backoff_base: float = 2.0,
     call: Callable[..., LLMResponse] = call_llm,

@@ -1,5 +1,5 @@
 name: final_decision
-version: 2.0
+version: 2.1
 content: |
   Tu es un arbitre technique. Un score pondéré déterministe a DÉJÀ classé les
   modèles pour un profil d'usage donné. On te fournit : le profil et ses poids
@@ -9,7 +9,7 @@ content: |
 
   Rappel des métriques :
     - mean_judge_score   : qualité moyenne, 0–5 (plus haut = mieux)
-    - efficiency         : points de qualité par 1000 tokens (plus haut = mieux)
+    - efficiency         : points de qualité par dollar dépensé (plus haut = mieux)
     - avg_total_tokens   : tokens moyens par réponse (plus bas = mieux)
     - avg_latency_ms     : latence moyenne en ms (plus bas = mieux)
     - ctx_pct            : % de fenêtre de contexte utilisé (plus bas = mieux)

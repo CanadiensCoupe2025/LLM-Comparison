@@ -133,7 +133,13 @@ def _require_env(var: str) -> str:
 # leaving an EMPTY response that the judge then scores ~0. Non-reasoning models
 # stop at their natural completion well under this cap, so a high ceiling costs
 # them nothing.
-DEFAULT_MAX_TOKENS = 8192
+# 16384 plutôt que 8192 : sur l'API Responses d'OpenAI, max_output_tokens est
+# un budget PARTAGÉ raisonnement + réponse visible — à 8192, un gpt-5.x qui
+# raisonne longuement sur une question arena-hard peut rendre une réponse VIDE
+# (status "incomplete"), facturée plein tarif et notée 0 par le juge. On ne va
+# pas au-delà : le SDK Anthropic refuse les requêtes non-streaming trop grosses
+# (garde-fou timeout ~10 min autour de 16k).
+DEFAULT_MAX_TOKENS = 16384
 
 
 def _safe_tokens(usage: Any, in_attr: str, out_attr: str) -> tuple[int, int]:

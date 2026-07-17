@@ -82,7 +82,10 @@ def judge(
         *,
         rubric:str | None = None,
         model:str = "gemini-2.5-pro",  # Pro = higher-quality, more consistent judging
-        max_tokens:int = 4096,
+        # 8192 : gemini-2.5-pro "réfléchit" avant de répondre et ses tokens de
+        # thinking consomment ce budget — à 4096, un verdict peut revenir vide
+        # (JudgeParseError → score NULL). Le JSON final ne fait que ~100 tokens.
+        max_tokens:int = 8192,
         max_retries: int = 3,
         backoff_base: float = 2.0,
         call: Callable[..., LLMResponse] = call_llm,

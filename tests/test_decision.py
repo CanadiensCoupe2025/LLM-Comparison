@@ -171,4 +171,4 @@ def test_prompt_hash_matches_registry_hash():
 def test_final_decision_prompt_is_v2():
     p = load_decision_prompt()
     assert p.name == "final_decision"
-    assert p.version == "2.0"
+    assert p.version == "2.1"
